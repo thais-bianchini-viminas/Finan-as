@@ -1,0 +1,30 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Transaction {
+  id          Int      @id @default(autoincrement())
+  description String
+  amount      Float
+  category    String
+  senderName  String   @default("Usuário") // Adicionado
+  date        DateTime @default(now())
+}
+
+model Budget {
+  id     Int    @id @default(autoincrement())
+  month  Int    // 1 a 12
+  year   Int    // ex: 2026
+  amount Float
+}
