@@ -6,7 +6,7 @@ const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 async function sendMessage(chatId, text, replyMarkup = null) {
   if (!TELEGRAM_BOT_TOKEN) return;
   const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
-  const body = { chat_id: chatId, text: text };
+  const body = { chat_id: chatId, text: text, parse_mode: 'Markdown' };
   if (replyMarkup) {
     body.reply_markup = replyMarkup;
   }
@@ -118,7 +118,38 @@ export async function POST(req) {
         return NextResponse.json({ status: 'success' });
       }
 
-      // 2.2 Gastos normais
+      // 2.2 Lidar com comando de Resumo
+      if (textLower === 'resumo') {
+        const now = new Date();
+        const month = now.getMonth() + 1;
+        const year = now.getFullYear();
+
+        const startOfMonth = new Date(year, month - 1, 1);
+        const endOfMonth = new Date(year, month, 0, 23, 59, 59, 999);
+
+        const transactions = await prisma.transaction.findMany({
+          where: {
+            date: {
+              gte: startOfMonth,
+              lte: endOfMonth
+            }
+          }
+        });
+
+        const totalMes = transactions.reduce((acc, curr) => acc + curr.amount, 0);
+
+        const existingBudget = await prisma.budget.findFirst({ where: { month, year } });
+        const orcado = existingBudget ? existingBudget.amount : 5000;
+        
+        const percentual = (totalMes / orcado) * 100;
+        
+        const responseText = `📊 *Resumo do Mês (${month}/${year})*\n\n🎯 Orçado: R$ ${orcado.toFixed(2)}\n💸 Realizado: R$ ${totalMes.toFixed(2)}\n📈 Utilizado: ${percentual.toFixed(1)}%`;
+        
+        await sendMessage(chatId, responseText);
+        return NextResponse.json({ status: 'success' });
+      }
+
+      // 2.3 Gastos normais
       const parts = text.split(' ');
       
       if (parts.length < 2) {
