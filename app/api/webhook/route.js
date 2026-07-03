@@ -77,6 +77,34 @@ export async function POST(req) {
       const text = update.message.text.trim();
       const senderName = update.message.from?.first_name || 'Usuário';
 
+      // 2.1 Lidar com comando de Orçamento
+      const textLower = text.toLowerCase();
+      if (textLower.startsWith('orçado') || textLower.startsWith('orcado') || textLower.startsWith('orçamento') || textLower.startsWith('orcamento')) {
+        const parts = text.split(' ');
+        const valueStr = parts.pop().replace(',', '.');
+        const amount = parseFloat(valueStr);
+        
+        if (isNaN(amount)) {
+           await sendMessage(chatId, `⚠️ Formato inválido. Envie no formato: "Orçado 5000"`);
+           return NextResponse.json({ status: 'ignored' });
+        }
+        
+        const now = new Date();
+        const month = now.getMonth() + 1;
+        const year = now.getFullYear();
+        
+        const existing = await prisma.budget.findFirst({ where: { month, year } });
+        if (existing) {
+          await prisma.budget.update({ where: { id: existing.id }, data: { amount } });
+        } else {
+          await prisma.budget.create({ data: { month, year, amount } });
+        }
+        
+        await sendMessage(chatId, `🎯 Orçamento deste mês (Mês ${month}) definido para R$ ${amount.toFixed(2)} com sucesso! (Atualize a página do site para ver)`);
+        return NextResponse.json({ status: 'success' });
+      }
+
+      // 2.2 Gastos normais
       const parts = text.split(' ');
       
       if (parts.length < 2) {
