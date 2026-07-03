@@ -101,8 +101,10 @@ export async function POST(req) {
 
       // 2.1 Comando Painel (Imagem)
       if (textLower === 'painel') {
-        await sendMessage(chatId, '📸 Gerando a imagem do painel atualizado. Isso pode levar alguns segundos...');
-        const photoUrl = `https://api.microlink.io/?url=https://finan-as-rose.vercel.app&screenshot=true&meta=false&embed=screenshot.url`;
+        await sendMessage(chatId, '📸 Gerando a imagem completa do painel atualizado. Isso pode levar alguns segundos...');
+        const cacheBuster = Date.now();
+        const targetUrl = encodeURIComponent(`https://finan-as-rose.vercel.app?v=${cacheBuster}`);
+        const photoUrl = `https://api.microlink.io/?url=${targetUrl}&screenshot=true&meta=false&embed=screenshot.url&screenshot.fullPage=true&waitFor=2000`;
         await sendPhoto(chatId, photoUrl);
         return NextResponse.json({ status: 'success' });
       }
