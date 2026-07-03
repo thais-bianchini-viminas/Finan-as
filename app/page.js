@@ -2,6 +2,7 @@ import prisma from '../lib/prisma';
 import { HistoryChart, DailyChart } from './components/DashboardCharts';
 import { format, isSameMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { deleteTransaction } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -81,11 +82,12 @@ export default async function Home() {
                 <th>Categoria</th>
                 <th>Descrição</th>
                 <th style={{ textAlign: 'right' }}>Valor (R$)</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
               {transactions.length === 0 ? (
-                <tr><td colSpan="5" style={{ textAlign: 'center', color: '#94a3b8' }}>Nenhum registro encontrado.</td></tr>
+                <tr><td colSpan="6" style={{ textAlign: 'center', color: '#94a3b8' }}>Nenhum registro encontrado.</td></tr>
               ) : (
                 transactions.map((t) => (
                   <tr key={t.id}>
@@ -94,6 +96,14 @@ export default async function Home() {
                     <td><span className="category-badge">{t.category}</span></td>
                     <td>{t.description}</td>
                     <td style={{ textAlign: 'right', fontWeight: 'bold' }}>R$ {t.amount.toFixed(2).replace('.', ',')}</td>
+                    <td style={{ textAlign: 'center' }}>
+                      <form action={async () => {
+                        'use server';
+                        await deleteTransaction(t.id);
+                      }}>
+                        <button type="submit" className="delete-btn" title="Excluir">🗑️</button>
+                      </form>
+                    </td>
                   </tr>
                 ))
               )}
