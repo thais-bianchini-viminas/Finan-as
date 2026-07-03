@@ -1,5 +1,5 @@
 import prisma from '../lib/prisma';
-import { HistoryChart, DailyChart } from './components/DashboardCharts';
+import { HistoryChart, DailyChart, CategoryChart } from './components/DashboardCharts';
 import { format, isSameMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { deleteTransaction } from './actions';
@@ -31,11 +31,19 @@ export default async function Home() {
   const historyData = Object.keys(historyMap).reverse().map(k => ({ name: k, total: historyMap[k] }));
 
   const dailyMap = {};
+  const categoryMap = {};
+  
   currentMonthTransactions.forEach(t => {
+    // Para o gráfico de dia a dia
     const d = format(t.date, 'dd/MM');
     dailyMap[d] = (dailyMap[d] || 0) + t.amount;
+
+    // Para o gráfico de categorias
+    categoryMap[t.category] = (categoryMap[t.category] || 0) + t.amount;
   });
+  
   const dailyData = Object.keys(dailyMap).sort().map(k => ({ day: k, total: dailyMap[k] }));
+  const categoryData = Object.keys(categoryMap).map(k => ({ category: k, total: categoryMap[k] }));
 
   return (
     <main className="container">
@@ -68,6 +76,10 @@ export default async function Home() {
         <div className="chart-container">
           <h2 className="section-title">Neste Mês (Dia a Dia)</h2>
           <DailyChart data={dailyData} />
+        </div>
+        <div className="chart-container" style={{ gridColumn: '1 / -1' }}>
+          <h2 className="section-title">Gastos por Categoria (Este Mês)</h2>
+          <CategoryChart data={categoryData} />
         </div>
       </div>
 
