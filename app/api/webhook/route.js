@@ -102,9 +102,8 @@ export async function POST(req) {
       // 2.1 Comando Painel (Imagem)
       if (textLower === 'painel') {
         await sendMessage(chatId, '📸 Gerando a imagem do painel atualizado. Isso pode levar alguns segundos...');
-        const cacheBuster = Date.now();
-        // A API thum.io tira print de um site e devolve como imagem.
-        const photoUrl = `https://image.thum.io/get/width/1200/crop/800/https://finan-as-rose.vercel.app?v=${cacheBuster}`;
+        // Removido o Date.now() para evitar que o thum.io sempre retorne a tela de "Loading"
+        const photoUrl = `https://image.thum.io/get/width/1200/crop/800/https://finan-as-rose.vercel.app`;
         await sendPhoto(chatId, photoUrl);
         return NextResponse.json({ status: 'success' });
       }
