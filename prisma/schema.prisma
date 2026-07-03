@@ -28,3 +28,8 @@ model Budget {
   year   Int    // ex: 2026
   amount Float
 }
+
+model TelegramUser {
+  chatId String @id
+  name   String
+}

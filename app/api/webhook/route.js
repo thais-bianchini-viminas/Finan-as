@@ -17,6 +17,16 @@ async function sendMessage(chatId, text, replyMarkup = null) {
   });
 }
 
+async function sendPhoto(chatId, photoUrl) {
+  if (!TELEGRAM_BOT_TOKEN) return;
+  const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`;
+  await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: chatId, photo: photoUrl }),
+  });
+}
+
 async function answerCallbackQuery(callbackQueryId, text) {
   const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/answerCallbackQuery`;
   await fetch(url, {
@@ -38,22 +48,11 @@ async function editMessageText(chatId, messageId, text) {
 function categorize(description) {
   const desc = description.toLowerCase();
   
-  // Alimentação
   if (desc.includes('almoço') || desc.includes('mercado') || desc.includes('ifood') || desc.includes('comida') || desc.includes('lanche') || desc.includes('pizza') || desc.includes('jantar') || desc.includes('padaria') || desc.includes('restaurante')) return 'Alimentação';
-  
-  // Transporte
   if (desc.includes('uber') || desc.includes('gasolina') || desc.includes('ônibus') || desc.includes('metro') || desc.includes('estacionamento') || desc.includes('99') || desc.includes('pedágio')) return 'Transporte';
-  
-  // Lazer
   if (desc.includes('cinema') || desc.includes('festa') || desc.includes('show') || desc.includes('bar') || desc.includes('passeio') || desc.includes('viagem') || desc.includes('netflix') || desc.includes('spotify')) return 'Lazer';
-  
-  // Saúde
   if (desc.includes('farmácia') || desc.includes('remédio') || desc.includes('médico') || desc.includes('exame') || desc.includes('terapia') || desc.includes('dentista') || desc.includes('academia')) return 'Saúde';
-  
-  // Moradia
   if (desc.includes('luz') || desc.includes('água') || desc.includes('internet') || desc.includes('aluguel') || desc.includes('condomínio') || desc.includes('energia') || desc.includes('gás')) return 'Moradia';
-  
-  // Contas / Cartão
   if (desc.includes('cartão') || desc.includes('fatura') || desc.includes('boleto') || desc.includes('conta') || desc.includes('imposto')) return 'Contas/Cartão';
 
   return 'Outros';
@@ -67,7 +66,7 @@ export async function POST(req) {
     if (update.callback_query) {
       const callbackData = update.callback_query.data;
       const callbackId = update.callback_query.id;
-      const chatId = update.callback_query.message.chat.id;
+      const chatId = update.callback_query.message.chat.id.toString();
       const messageId = update.callback_query.message.message_id;
 
       if (callbackData.startsWith('delete_')) {
@@ -87,12 +86,30 @@ export async function POST(req) {
 
     // 2. Lidar com novas mensagens de texto
     if (update.message && update.message.text) {
-      const chatId = update.message.chat.id;
+      const chatId = update.message.chat.id.toString();
       const text = update.message.text.trim();
       const senderName = update.message.from?.first_name || 'Usuário';
 
-      // 2.1 Lidar com comando de Orçamento
+      // 2.0 Registrar/Atualizar usuário no banco para notificações
+      await prisma.telegramUser.upsert({
+        where: { chatId: chatId },
+        update: { name: senderName },
+        create: { chatId: chatId, name: senderName }
+      });
+
       const textLower = text.toLowerCase();
+
+      // 2.1 Comando Painel (Imagem)
+      if (textLower === 'painel') {
+        await sendMessage(chatId, '📸 Gerando a imagem do painel atualizado. Isso pode levar alguns segundos...');
+        const cacheBuster = Date.now();
+        // A API thum.io tira print de um site e devolve como imagem.
+        const photoUrl = `https://image.thum.io/get/width/1200/crop/800/https://finan-as-rose.vercel.app?v=${cacheBuster}`;
+        await sendPhoto(chatId, photoUrl);
+        return NextResponse.json({ status: 'success' });
+      }
+
+      // 2.2 Comando de Orçamento
       if (textLower.startsWith('orçado') || textLower.startsWith('orcado') || textLower.startsWith('orçamento') || textLower.startsWith('orcamento')) {
         const parts = text.split(' ');
         const valueStr = parts.pop().replace(',', '.');
@@ -118,7 +135,7 @@ export async function POST(req) {
         return NextResponse.json({ status: 'success' });
       }
 
-      // 2.2 Lidar com comando de Resumo
+      // 2.3 Comando de Resumo
       if (textLower === 'resumo') {
         const now = new Date();
         const month = now.getMonth() + 1;
@@ -149,7 +166,7 @@ export async function POST(req) {
         return NextResponse.json({ status: 'success' });
       }
 
-      // 2.3 Gastos normais
+      // 2.4 Gastos normais
       const parts = text.split(' ');
       
       if (parts.length < 2) {
@@ -190,6 +207,18 @@ export async function POST(req) {
         `✅ Registrado por ${senderName}:\n${description} (R$ ${amount.toFixed(2)})\n📂 Categoria: ${category}`, 
         replyMarkup
       );
+
+      // NOVIDADE: Notificar os outros usuários cadastrados!
+      const allUsers = await prisma.telegramUser.findMany();
+      for (const user of allUsers) {
+        if (user.chatId !== chatId) {
+          await sendMessage(
+            user.chatId,
+            `🔔 **Aviso:** ${senderName} acabou de registrar um gasto:\n\n${description} (R$ ${amount.toFixed(2)})\n📂 Categoria: ${category}`
+          );
+        }
+      }
+
       return NextResponse.json({ status: 'success' });
     }
 
