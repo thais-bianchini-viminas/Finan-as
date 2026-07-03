@@ -12,7 +12,7 @@ export function HistoryChart({ data }) {
           <XAxis dataKey="name" stroke="#94a3b8" />
           <YAxis stroke="#94a3b8" />
           <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: 8, color: '#f8fafc' }} />
-          <Bar dataKey="total" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="total" fill="#3b82f6" radius={[4, 4, 0, 0]} isAnimationActive={false} />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -28,7 +28,7 @@ export function DailyChart({ data }) {
           <XAxis dataKey="day" stroke="#94a3b8" />
           <YAxis stroke="#94a3b8" />
           <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: 8, color: '#f8fafc' }} />
-          <Bar dataKey="total" fill="#10b981" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="total" fill="#10b981" radius={[4, 4, 0, 0]} isAnimationActive={false} />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -51,6 +51,7 @@ export function CategoryChart({ data }) {
             dataKey="total"
             nameKey="category"
             stroke="none"
+            isAnimationActive={false}
           >
             {data.map((entry, index) => (
               <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />

@@ -104,7 +104,7 @@ export async function POST(req) {
         await sendMessage(chatId, '📸 Gerando a imagem completa do painel atualizado. Isso pode levar alguns segundos...');
         const cacheBuster = Date.now();
         const targetUrl = encodeURIComponent(`https://finan-as-rose.vercel.app?v=${cacheBuster}`);
-        const photoUrl = `https://api.microlink.io/?url=${targetUrl}&screenshot=true&meta=false&embed=screenshot.url&screenshot.fullPage=true&waitFor=2000`;
+        const photoUrl = `https://api.microlink.io/?url=${targetUrl}&screenshot=true&meta=false&embed=screenshot.url&viewport.width=1200&viewport.height=1800&waitFor=3000`;
         await sendPhoto(chatId, photoUrl);
         return NextResponse.json({ status: 'success' });
       }
