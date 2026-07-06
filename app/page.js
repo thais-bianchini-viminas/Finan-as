@@ -14,15 +14,17 @@ export default async function Home() {
     orderBy: { date: 'desc' }
   });
 
-  const budgets = await prisma.budget.findMany();
-
   const now = new Date();
   const currentMonthTransactions = transactions.filter(t => isSameMonth(t.date, now));
   const totalMes = currentMonthTransactions.reduce((acc, curr) => acc + curr.amount, 0);
   
-  // Orçamento fixo ou do banco (usando default 5000 se não definido)
-  const currentBudget = budgets.find(b => b.month === now.getMonth() + 1 && b.year === now.getFullYear());
-  const orcado = currentBudget ? currentBudget.amount : 5000; 
+  // Metas por categoria
+  const categoryBudgets = await prisma.categoryBudget.findMany({ 
+    where: { month: now.getMonth() + 1, year: now.getFullYear() } 
+  });
+
+  // Orçamento Geral agora é a soma de todas as metas
+  const orcado = categoryBudgets.reduce((acc, curr) => acc + curr.amount, 0);
   const percentual = (totalMes / orcado) * 100;
 
   // Process data for charts
@@ -48,10 +50,7 @@ export default async function Home() {
   const dailyData = Object.keys(dailyMap).sort().map(k => ({ day: k, total: dailyMap[k] }));
   const categoryData = Object.keys(categoryMap).map(k => ({ category: k, total: categoryMap[k] }));
 
-  // Metas por categoria
-  const categoryBudgets = await prisma.categoryBudget.findMany({ 
-    where: { month: now.getMonth() + 1, year: now.getFullYear() } 
-  });
+
   
   const categoryBudgetMap = {};
   categoryBudgets.forEach(cb => {
