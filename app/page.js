@@ -102,8 +102,10 @@ export default async function Home() {
         </div>
         <div className="chart-container" style={{ gridColumn: '1 / -1' }}>
           <h2 className="section-title">Meta vs Atingido (Por Categoria)</h2>
-          <BudgetForm />
-          <ActiveBudgetsTable budgets={categoryBudgets} />
+          <div className="hide-on-print">
+            <BudgetForm />
+            <ActiveBudgetsTable budgets={categoryBudgets} />
+          </div>
           <div style={{ marginTop: '2rem' }}>
             <CategoryBudgetChart data={categoryBudgetData} />
           </div>

@@ -6,14 +6,32 @@ const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 async function sendMessage(chatId, text, replyMarkup = null) {
   if (!TELEGRAM_BOT_TOKEN) return;
   const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
-  const body = { chat_id: chatId, text: text, parse_mode: 'Markdown' };
+  const body = { chat_id: chatId, text: text, parse_mode: 'HTML' };
   if (replyMarkup) {
     body.reply_markup = replyMarkup;
   }
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error('Telegram sendMessage error:', errorText);
+    }
+  } catch (error) {
+    console.error('Fetch error in sendMessage:', error);
+  }
+}
+
+async function sendDocument(chatId, documentUrl) {
+  if (!TELEGRAM_BOT_TOKEN) return;
+  const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument`;
   await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ chat_id: chatId, document: documentUrl }),
   });
 }
 
@@ -99,13 +117,13 @@ export async function POST(req) {
 
       const textLower = text.toLowerCase();
 
-      // 2.1 Comando Painel (Imagem)
+      // 2.1 Comando Painel (Relatório PDF)
       if (textLower === 'painel') {
-        await sendMessage(chatId, '📸 Gerando a imagem completa do painel atualizado. Isso pode levar alguns segundos...');
+        await sendMessage(chatId, '📄 Gerando o relatório em PDF atualizado. Isso pode levar alguns segundos...');
         const cacheBuster = Date.now();
         const targetUrl = encodeURIComponent(`https://finan-as-rose.vercel.app?v=${cacheBuster}`);
-        const photoUrl = `https://api.microlink.io/?url=${targetUrl}&screenshot=true&meta=false&embed=screenshot.url&viewport.width=1200&viewport.height=1800&waitFor=3000`;
-        await sendPhoto(chatId, photoUrl);
+        const pdfUrl = `https://api.microlink.io/?url=${targetUrl}&pdf=true&meta=false&embed=pdf.url&waitFor=3000&pdf.format=A4&pdf.printBackground=true`;
+        await sendDocument(chatId, pdfUrl);
         return NextResponse.json({ status: 'success' });
       }
 
@@ -134,7 +152,7 @@ export async function POST(req) {
           await prisma.categoryBudget.create({ data: { month, year, category, amount } });
         }
         
-        await sendMessage(chatId, `🎯 Meta de **${category}** para este mês (Mês ${month}) definida para R$ ${amount.toFixed(2)} com sucesso!`);
+        await sendMessage(chatId, `🎯 Meta de <b>${category}</b> para este mês (Mês ${month}) definida para R$ ${amount.toFixed(2)} com sucesso!`);
         return NextResponse.json({ status: 'success' });
       }
 
@@ -163,7 +181,7 @@ export async function POST(req) {
         
         const percentual = (totalMes / orcado) * 100;
         
-        const responseText = `📊 *Resumo do Mês (${month}/${year})*\n\n🎯 Orçado: R$ ${orcado.toFixed(2)}\n💸 Realizado: R$ ${totalMes.toFixed(2)}\n📈 Utilizado: ${percentual.toFixed(1)}%`;
+        const responseText = `📊 <b>Resumo do Mês (${month}/${year})</b>\n\n🎯 Orçado: R$ ${orcado.toFixed(2)}\n💸 Realizado: R$ ${totalMes.toFixed(2)}\n📈 Utilizado: ${percentual.toFixed(1)}%`;
         
         await sendMessage(chatId, responseText);
         return NextResponse.json({ status: 'success' });
@@ -217,7 +235,7 @@ export async function POST(req) {
         if (user.chatId !== chatId) {
           await sendMessage(
             user.chatId,
-            `🔔 **Aviso:** ${senderName} acabou de registrar um gasto:\n\n${description} (R$ ${amount.toFixed(2)})\n📂 Categoria: ${category}`
+            `🔔 <b>Aviso:</b> ${senderName} acabou de registrar um gasto:\n\n${description} (R$ ${amount.toFixed(2)})\n📂 Categoria: ${category}`
           );
         }
       }
