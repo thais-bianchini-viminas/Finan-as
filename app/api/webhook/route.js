@@ -117,13 +117,23 @@ export async function POST(req) {
 
       const textLower = text.toLowerCase();
 
-      // 2.1 Comando Painel (Relatório PDF)
+      // 2.1 Comando Painel (Foto dos Gráficos)
       if (textLower === 'painel') {
-        await sendMessage(chatId, '📄 Gerando o relatório em PDF atualizado. Isso pode levar alguns segundos...');
+        await sendMessage(chatId, '📸 Gerando a imagem do painel. Isso pode levar alguns segundos...');
         const cacheBuster = Date.now();
-        const targetUrl = encodeURIComponent(`https://finan-as-rose.vercel.app?v=${cacheBuster}`);
-        const pdfUrl = `https://api.microlink.io/?url=${targetUrl}&pdf=true&meta=false&embed=pdf.url&waitFor=3000&pdf.format=A4&pdf.printBackground=true`;
-        await sendDocument(chatId, pdfUrl);
+        const targetUrl = encodeURIComponent(`https://finan-as-rose.vercel.app?v=${cacheBuster}&view=charts`);
+        const photoUrl = `https://api.microlink.io/?url=${targetUrl}&screenshot=true&meta=false&embed=screenshot.url&viewport.width=1200&viewport.height=1400&waitFor=3000`;
+        await sendPhoto(chatId, photoUrl);
+        return NextResponse.json({ status: 'success' });
+      }
+
+      // 2.2 Comando Gastos (Foto dos Lançamentos)
+      if (textLower === 'gastos') {
+        await sendMessage(chatId, '🧾 Gerando a imagem da sua lista de gastos. Isso pode levar alguns segundos...');
+        const cacheBuster = Date.now();
+        const targetUrl = encodeURIComponent(`https://finan-as-rose.vercel.app?v=${cacheBuster}&view=gastos`);
+        const photoUrl = `https://api.microlink.io/?url=${targetUrl}&screenshot=true&meta=false&embed=screenshot.url&screenshot.fullPage=true&viewport.width=1200&waitFor=3000`;
+        await sendPhoto(chatId, photoUrl);
         return NextResponse.json({ status: 'success' });
       }
 

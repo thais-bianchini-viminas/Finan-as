@@ -14,7 +14,7 @@ const CATEGORIES = [
   'Outros'
 ];
 
-export function TransactionsTable({ transactions }) {
+export function TransactionsTable({ transactions, hideActions = false }) {
   const [editingId, setEditingId] = useState(null);
 
   if (transactions.length === 0) {
@@ -28,11 +28,11 @@ export function TransactionsTable({ transactions }) {
               <th>Categoria</th>
               <th>Descrição</th>
               <th style={{ textAlign: 'right' }}>Valor (R$)</th>
-              <th></th>
+              {!hideActions && <th></th>}
             </tr>
           </thead>
           <tbody>
-            <tr><td colSpan="6" style={{ textAlign: 'center', color: '#94a3b8' }}>Nenhum registro encontrado.</td></tr>
+            <tr><td colSpan={hideActions ? "5" : "6"} style={{ textAlign: 'center', color: '#94a3b8' }}>Nenhum registro encontrado.</td></tr>
           </tbody>
         </table>
       </div>
@@ -49,7 +49,7 @@ export function TransactionsTable({ transactions }) {
             <th>Categoria</th>
             <th>Descrição</th>
             <th style={{ textAlign: 'right' }}>Valor (R$)</th>
-            <th style={{ textAlign: 'center' }} className="hide-on-print">Ações</th>
+            {!hideActions && <th style={{ textAlign: 'center' }} className="hide-on-print">Ações</th>}
           </tr>
         </thead>
         <tbody>
@@ -68,18 +68,20 @@ export function TransactionsTable({ transactions }) {
                   <td><span className="category-badge">{t.category}</span></td>
                   <td>{t.description}</td>
                   <td style={{ textAlign: 'right', fontWeight: 'bold' }}>R$ {t.amount.toFixed(2).replace('.', ',')}</td>
-                  <td style={{ textAlign: 'center' }} className="hide-on-print">
-                    <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
-                      <button onClick={() => setEditingId(t.id)} className="action-btn edit-btn" title="Editar">✏️</button>
-                      <form action={async () => {
-                        if (confirm('Deseja excluir este gasto?')) {
-                          await deleteTransaction(t.id);
-                        }
-                      }}>
-                        <button type="submit" className="action-btn delete-btn" title="Excluir">🗑️</button>
-                      </form>
-                    </div>
-                  </td>
+                  {!hideActions && (
+                    <td style={{ textAlign: 'center' }} className="hide-on-print">
+                      <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
+                        <button onClick={() => setEditingId(t.id)} className="action-btn edit-btn" title="Editar">✏️</button>
+                        <form action={async () => {
+                          if (confirm('Deseja excluir este gasto?')) {
+                            await deleteTransaction(t.id);
+                          }
+                        }}>
+                          <button type="submit" className="action-btn delete-btn" title="Excluir">🗑️</button>
+                        </form>
+                      </div>
+                    </td>
+                  )}
                 </>
               )}
             </tr>

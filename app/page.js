@@ -9,7 +9,12 @@ import { deleteTransaction } from './actions';
 
 export const dynamic = 'force-dynamic';
 
-export default async function Home() {
+export default async function Home({ searchParams }) {
+  const { view } = await searchParams;
+  const isChartsView = view === 'charts';
+  const isGastosView = view === 'gastos';
+  const isDefaultView = !view;
+
   const transactions = await prisma.transaction.findMany({
     orderBy: { date: 'desc' }
   });
@@ -71,51 +76,68 @@ export default async function Home() {
         <p>Visão do Casal - Registros via Telegram</p>
       </header>
 
-      <section className="summary-cards animate-fade-in delay-1">
-        <div className="card">
-          <div className="card-title">Orçado (Mês)</div>
-          <div className="card-value">R$ {orcado.toFixed(2).replace('.', ',')}</div>
-        </div>
-        <div className="card">
-          <div className="card-title">Realizado (Mês)</div>
-          <div className={`card-value ${totalMes > orcado ? 'negative' : 'positive'}`}>
-            R$ {totalMes.toFixed(2).replace('.', ',')}
+      {(isDefaultView || isChartsView) && (
+        <section className="summary-cards animate-fade-in delay-1">
+          <div className="card">
+            <div className="card-title">Orçado (Mês)</div>
+            <div className="card-value">R$ {orcado.toFixed(2).replace('.', ',')}</div>
           </div>
-          <div style={{ marginTop: '1rem', height: 6, background: 'rgba(255,255,255,0.1)', borderRadius: 4, overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: `${Math.min(percentual, 100)}%`, background: totalMes > orcado ? 'var(--danger)' : 'var(--success)', borderRadius: 4 }} />
+          <div className="card">
+            <div className="card-title">Realizado (Mês)</div>
+            <div className={`card-value ${totalMes > orcado ? 'negative' : 'positive'}`}>
+              R$ {totalMes.toFixed(2).replace('.', ',')}
+            </div>
+            <div style={{ marginTop: '1rem', height: 6, background: 'rgba(255,255,255,0.1)', borderRadius: 4, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${Math.min(percentual, 100)}%`, background: totalMes > orcado ? 'var(--danger)' : 'var(--success)', borderRadius: 4 }} />
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
-      <div className="charts-grid animate-fade-in delay-2">
-        <div className="chart-container">
-          <h2 className="section-title">Histórico (Mês a Mês)</h2>
-          <HistoryChart data={historyData} />
-        </div>
-        <div className="chart-container">
-          <h2 className="section-title">Neste Mês (Dia a Dia)</h2>
-          <DailyChart data={dailyData} />
-        </div>
-        <div className="chart-container" style={{ gridColumn: '1 / -1' }}>
-          <h2 className="section-title">Gastos por Categoria (Este Mês)</h2>
-          <CategoryChart data={categoryData} />
-        </div>
-        <div className="chart-container" style={{ gridColumn: '1 / -1' }}>
-          <h2 className="section-title">Meta vs Atingido (Por Categoria)</h2>
-          <div className="hide-on-print">
-            <BudgetForm />
-            <ActiveBudgetsTable budgets={categoryBudgets} />
-          </div>
-          <div style={{ marginTop: '2rem' }}>
-            <CategoryBudgetChart data={categoryBudgetData} />
-          </div>
-        </div>
-      </div>
+      {(isDefaultView || isChartsView || isGastosView) && (
+        <div className="charts-grid animate-fade-in delay-2">
+          
+          {(isDefaultView || isChartsView) && (
+            <>
+              <div className="chart-container">
+                <h2 className="section-title">Histórico (Mês a Mês)</h2>
+                <HistoryChart data={historyData} />
+              </div>
+              <div className="chart-container">
+                <h2 className="section-title">Neste Mês (Dia a Dia)</h2>
+                <DailyChart data={dailyData} />
+              </div>
+            </>
+          )}
 
-      <section className="animate-fade-in delay-3" style={{ marginTop: '3rem' }}>
-        <h2 className="section-title">Tabela de Gastos (Editável)</h2>
-        <TransactionsTable transactions={transactions} />
-      </section>
+          <div className="chart-container" style={{ gridColumn: '1 / -1' }}>
+            <h2 className="section-title">Gastos por Categoria (Este Mês)</h2>
+            <CategoryChart data={categoryData} />
+          </div>
+
+          {(isDefaultView || isChartsView) && (
+            <div className="chart-container" style={{ gridColumn: '1 / -1' }}>
+              <h2 className="section-title">Meta vs Atingido (Por Categoria)</h2>
+              {isDefaultView && (
+                <div className="hide-on-print">
+                  <BudgetForm />
+                  <ActiveBudgetsTable budgets={categoryBudgets} />
+                </div>
+              )}
+              <div style={{ marginTop: '2rem' }}>
+                <CategoryBudgetChart data={categoryBudgetData} />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {(isDefaultView || isGastosView) && (
+        <section className="animate-fade-in delay-3" style={{ marginTop: '3rem' }}>
+          <h2 className="section-title">Tabela de Gastos {isDefaultView && "(Editável)"}</h2>
+          <TransactionsTable transactions={transactions} hideActions={!isDefaultView} />
+        </section>
+      )}
     </main>
   );
 }
