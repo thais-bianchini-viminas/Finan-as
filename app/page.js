@@ -1,6 +1,8 @@
 import prisma from '../lib/prisma';
 import { HistoryChart, DailyChart, CategoryChart, CategoryBudgetChart } from './components/DashboardCharts';
 import { BudgetForm } from './components/BudgetForm';
+import { ActiveBudgetsTable } from './components/ActiveBudgetsTable';
+import { TransactionsTable } from './components/TransactionsTable';
 import { format, isSameMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { deleteTransaction } from './actions';
@@ -102,6 +104,7 @@ export default async function Home() {
         <div className="chart-container" style={{ gridColumn: '1 / -1' }}>
           <h2 className="section-title">Meta vs Atingido (Por Categoria)</h2>
           <BudgetForm />
+          <ActiveBudgetsTable budgets={categoryBudgets} />
           <div style={{ marginTop: '2rem' }}>
             <CategoryBudgetChart data={categoryBudgetData} />
           </div>
@@ -109,44 +112,8 @@ export default async function Home() {
       </div>
 
       <section className="animate-fade-in delay-3" style={{ marginTop: '3rem' }}>
-        <h2 className="section-title">Tabela de Gastos</h2>
-        <div className="table-container">
-          <table className="styled-table">
-            <thead>
-              <tr>
-                <th>Data</th>
-                <th>Quem</th>
-                <th>Categoria</th>
-                <th>Descrição</th>
-                <th style={{ textAlign: 'right' }}>Valor (R$)</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {transactions.length === 0 ? (
-                <tr><td colSpan="6" style={{ textAlign: 'center', color: '#94a3b8' }}>Nenhum registro encontrado.</td></tr>
-              ) : (
-                transactions.map((t) => (
-                  <tr key={t.id}>
-                    <td>{format(t.date, 'dd/MM/yyyy')}</td>
-                    <td><span className="badge-user">{t.senderName}</span></td>
-                    <td><span className="category-badge">{t.category}</span></td>
-                    <td>{t.description}</td>
-                    <td style={{ textAlign: 'right', fontWeight: 'bold' }}>R$ {t.amount.toFixed(2).replace('.', ',')}</td>
-                    <td style={{ textAlign: 'center' }}>
-                      <form action={async () => {
-                        'use server';
-                        await deleteTransaction(t.id);
-                      }}>
-                        <button type="submit" className="delete-btn" title="Excluir">🗑️</button>
-                      </form>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+        <h2 className="section-title">Tabela de Gastos (Editável)</h2>
+        <TransactionsTable transactions={transactions} />
       </section>
     </main>
   );

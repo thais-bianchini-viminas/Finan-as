@@ -46,3 +46,30 @@ export async function setCategoryBudget(formData) {
     console.error("Erro ao salvar meta:", error);
   }
 }
+
+export async function updateTransaction(id, data) {
+  try {
+    await prisma.transaction.update({
+      where: { id },
+      data: {
+        category: data.category,
+        description: data.description,
+        amount: parseFloat(data.amount)
+      }
+    });
+    revalidatePath('/');
+  } catch (error) {
+    console.error("Erro ao atualizar transação:", error);
+  }
+}
+
+export async function deleteCategoryBudget(id) {
+  try {
+    await prisma.categoryBudget.delete({
+      where: { id }
+    });
+    revalidatePath('/');
+  } catch (error) {
+    console.error("Erro ao deletar meta:", error);
+  }
+}
