@@ -1,5 +1,6 @@
 import prisma from '../lib/prisma';
 import { HistoryChart, DailyChart, CategoryChart, CategoryBudgetChart } from './components/DashboardCharts';
+import { BudgetForm } from './components/BudgetForm';
 import { format, isSameMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { deleteTransaction } from './actions';
@@ -100,7 +101,10 @@ export default async function Home() {
         </div>
         <div className="chart-container" style={{ gridColumn: '1 / -1' }}>
           <h2 className="section-title">Meta vs Atingido (Por Categoria)</h2>
-          <CategoryBudgetChart data={categoryBudgetData} />
+          <BudgetForm />
+          <div style={{ marginTop: '2rem' }}>
+            <CategoryBudgetChart data={categoryBudgetData} />
+          </div>
         </div>
       </div>
 
