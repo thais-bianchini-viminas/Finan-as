@@ -176,8 +176,10 @@ export async function POST(req) {
 
         const totalMes = transactions.reduce((acc, curr) => acc + curr.amount, 0);
 
-        const existingBudget = await prisma.budget.findFirst({ where: { month, year } });
-        const orcado = existingBudget ? existingBudget.amount : 5000;
+        const categoryBudgets = await prisma.categoryBudget.findMany({ 
+          where: { month, year } 
+        });
+        const orcado = categoryBudgets.reduce((acc, curr) => acc + curr.amount, 0);
         
         const percentual = (totalMes / orcado) * 100;
         
