@@ -122,7 +122,7 @@ export async function POST(req) {
         await sendMessage(chatId, '📸 Gerando a imagem do painel. Isso pode levar alguns segundos...');
         const cacheBuster = Date.now();
         const targetUrl = encodeURIComponent(`https://finan-as-rose.vercel.app?v=${cacheBuster}&view=charts`);
-        const photoUrl = `https://api.microlink.io/?url=${targetUrl}&screenshot=true&meta=false&embed=screenshot.url&viewport.width=1200&viewport.height=1400&waitFor=3000`;
+        const photoUrl = `https://api.microlink.io/?url=${targetUrl}&screenshot=true&meta=false&embed=screenshot.url&fullPage=true&viewport.width=1200&waitFor=3000`;
         await sendPhoto(chatId, photoUrl);
         return NextResponse.json({ status: 'success' });
       }
@@ -132,7 +132,7 @@ export async function POST(req) {
         await sendMessage(chatId, '🧾 Gerando a imagem da sua lista de gastos. Isso pode levar alguns segundos...');
         const cacheBuster = Date.now();
         const targetUrl = encodeURIComponent(`https://finan-as-rose.vercel.app?v=${cacheBuster}&view=gastos`);
-        const photoUrl = `https://api.microlink.io/?url=${targetUrl}&screenshot=true&meta=false&embed=screenshot.url&screenshot.fullPage=true&viewport.width=1200&waitFor=3000`;
+        const photoUrl = `https://api.microlink.io/?url=${targetUrl}&screenshot=true&meta=false&embed=screenshot.url&fullPage=true&viewport.width=1200&waitFor=3000`;
         await sendPhoto(chatId, photoUrl);
         return NextResponse.json({ status: 'success' });
       }
