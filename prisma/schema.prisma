@@ -33,3 +33,11 @@ model TelegramUser {
   chatId String @id
   name   String
 }
+
+model CategoryBudget {
+  id       Int    @id @default(autoincrement())
+  month    Int
+  year     Int
+  category String
+  amount   Float
+}

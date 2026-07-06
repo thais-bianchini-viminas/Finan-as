@@ -48,11 +48,11 @@ async function editMessageText(chatId, messageId, text) {
 function categorize(description) {
   const desc = description.toLowerCase();
   
-  if (desc.includes('almoço') || desc.includes('mercado') || desc.includes('ifood') || desc.includes('comida') || desc.includes('lanche') || desc.includes('pizza') || desc.includes('jantar') || desc.includes('padaria') || desc.includes('sorvete')|| desc.includes('restaurante')) return 'Alimentação';
+  if (desc.includes('almoço') || desc.includes('mercado') || desc.includes('ifood') || desc.includes('comida') || desc.includes('lanche') || desc.includes('pizza') || desc.includes('jantar') || desc.includes('padaria') || desc.includes('restaurante')) return 'Alimentação';
   if (desc.includes('uber') || desc.includes('gasolina') || desc.includes('ônibus') || desc.includes('metro') || desc.includes('estacionamento') || desc.includes('99') || desc.includes('pedágio')) return 'Transporte';
   if (desc.includes('cinema') || desc.includes('festa') || desc.includes('show') || desc.includes('bar') || desc.includes('passeio') || desc.includes('viagem') || desc.includes('netflix') || desc.includes('spotify')) return 'Lazer';
   if (desc.includes('farmácia') || desc.includes('remédio') || desc.includes('médico') || desc.includes('exame') || desc.includes('terapia') || desc.includes('dentista') || desc.includes('academia')) return 'Saúde';
-  if (desc.includes('luz') || desc.includes('água') || desc.includes('internet') || desc.includes('aluguel') || desc.includes('condomínio') || desc.includes('energia') || desc.includes('financiamento')|| desc.includes('gás')) return 'Moradia';
+  if (desc.includes('luz') || desc.includes('água') || desc.includes('internet') || desc.includes('aluguel') || desc.includes('condomínio') || desc.includes('energia') || desc.includes('gás')) return 'Moradia';
   if (desc.includes('cartão') || desc.includes('fatura') || desc.includes('boleto') || desc.includes('conta') || desc.includes('imposto')) return 'Contas/Cartão';
 
   return 'Outros';
@@ -135,7 +135,36 @@ export async function POST(req) {
         return NextResponse.json({ status: 'success' });
       }
 
-      // 2.3 Comando de Resumo
+      // 2.3 Comando de Meta por Categoria
+      if (textLower.startsWith('meta ')) {
+        const parts = text.split(' ');
+        const valueStr = parts.pop().replace(',', '.');
+        const amount = parseFloat(valueStr);
+        const categoryInput = parts.slice(1).join(' ').trim();
+        
+        if (isNaN(amount) || !categoryInput) {
+           await sendMessage(chatId, `⚠️ Formato inválido. Envie no formato: "Meta Moradia 2800"`);
+           return NextResponse.json({ status: 'ignored' });
+        }
+        
+        const category = categorize(categoryInput);
+        
+        const now = new Date();
+        const month = now.getMonth() + 1;
+        const year = now.getFullYear();
+        
+        const existing = await prisma.categoryBudget.findFirst({ where: { month, year, category } });
+        if (existing) {
+          await prisma.categoryBudget.update({ where: { id: existing.id }, data: { amount } });
+        } else {
+          await prisma.categoryBudget.create({ data: { month, year, category, amount } });
+        }
+        
+        await sendMessage(chatId, `🎯 Meta de **${category}** para este mês (Mês ${month}) definida para R$ ${amount.toFixed(2)} com sucesso!`);
+        return NextResponse.json({ status: 'success' });
+      }
+
+      // 2.4 Comando de Resumo
       if (textLower === 'resumo') {
         const now = new Date();
         const month = now.getMonth() + 1;
@@ -166,7 +195,7 @@ export async function POST(req) {
         return NextResponse.json({ status: 'success' });
       }
 
-      // 2.4 Gastos normais
+      // 2.5 Gastos normais
       const parts = text.split(' ');
       
       if (parts.length < 2) {

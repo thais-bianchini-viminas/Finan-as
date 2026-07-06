@@ -1,5 +1,5 @@
 import prisma from '../lib/prisma';
-import { HistoryChart, DailyChart, CategoryChart } from './components/DashboardCharts';
+import { HistoryChart, DailyChart, CategoryChart, CategoryBudgetChart } from './components/DashboardCharts';
 import { format, isSameMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { deleteTransaction } from './actions';
@@ -45,6 +45,23 @@ export default async function Home() {
   const dailyData = Object.keys(dailyMap).sort().map(k => ({ day: k, total: dailyMap[k] }));
   const categoryData = Object.keys(categoryMap).map(k => ({ category: k, total: categoryMap[k] }));
 
+  // Metas por categoria
+  const categoryBudgets = await prisma.categoryBudget.findMany({ 
+    where: { month: now.getMonth() + 1, year: now.getFullYear() } 
+  });
+  
+  const categoryBudgetMap = {};
+  categoryBudgets.forEach(cb => {
+    categoryBudgetMap[cb.category] = cb.amount;
+  });
+
+  const allCategories = new Set([...Object.keys(categoryMap), ...Object.keys(categoryBudgetMap)]);
+  const categoryBudgetData = Array.from(allCategories).map(cat => ({
+    category: cat,
+    atingido: categoryMap[cat] || 0,
+    meta: categoryBudgetMap[cat] || 0
+  }));
+
   return (
     <main className="container">
       <header className="header animate-fade-in">
@@ -80,6 +97,10 @@ export default async function Home() {
         <div className="chart-container" style={{ gridColumn: '1 / -1' }}>
           <h2 className="section-title">Gastos por Categoria (Este Mês)</h2>
           <CategoryChart data={categoryData} />
+        </div>
+        <div className="chart-container" style={{ gridColumn: '1 / -1' }}>
+          <h2 className="section-title">Meta vs Atingido (Por Categoria)</h2>
+          <CategoryBudgetChart data={categoryBudgetData} />
         </div>
       </div>
 

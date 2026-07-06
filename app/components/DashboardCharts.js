@@ -64,3 +64,21 @@ export function CategoryChart({ data }) {
     </div>
   );
 }
+
+export function CategoryBudgetChart({ data }) {
+  if (data.length === 0) return <p style={{ color: '#94a3b8' }}>Nenhuma meta ou gasto registrado ainda.</p>;
+  return (
+    <div style={{ width: '100%', height: 350 }}>
+      <ResponsiveContainer>
+        <BarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+          <XAxis dataKey="category" stroke="#94a3b8" />
+          <YAxis stroke="#94a3b8" />
+          <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: 8, color: '#f8fafc' }} />
+          <Legend wrapperStyle={{ color: '#94a3b8' }} />
+          <Bar dataKey="meta" name="Meta" fill="#3b82f6" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+          <Bar dataKey="atingido" name="Atingido" fill="#10b981" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
