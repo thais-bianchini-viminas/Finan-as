@@ -3,6 +3,7 @@ import { HistoryChart, DailyChart, CategoryChart, CategoryBudgetChart } from './
 import { BudgetForm } from './components/BudgetForm';
 import { ActiveBudgetsTable } from './components/ActiveBudgetsTable';
 import { TransactionsTable } from './components/TransactionsTable';
+import { DashboardFilter } from './components/DashboardFilter';
 import { format, isSameMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { deleteTransaction } from './actions';
@@ -10,22 +11,36 @@ import { deleteTransaction } from './actions';
 export const dynamic = 'force-dynamic';
 
 export default async function Home({ searchParams }) {
-  const { view } = await searchParams;
+  const { view, month, year, category } = await searchParams;
   const isChartsView = view === 'charts';
   const isGastosView = view === 'gastos';
   const isDefaultView = !view;
 
-  const transactions = await prisma.transaction.findMany({
+  const now = new Date();
+  const filterMonth = month ? parseInt(month, 10) : now.getMonth() + 1;
+  const filterYear = year ? parseInt(year, 10) : now.getFullYear();
+  const filterCategory = category && category !== 'all' ? category : null;
+
+  const startOfMonth = new Date(filterYear, filterMonth - 1, 1);
+  const endOfMonth = new Date(filterYear, filterMonth, 0, 23, 59, 59, 999);
+
+  // Busca todos para o histórico
+  const allTransactions = await prisma.transaction.findMany({
+    where: filterCategory ? { category: filterCategory } : {},
     orderBy: { date: 'desc' }
   });
 
-  const now = new Date();
-  const currentMonthTransactions = transactions.filter(t => isSameMonth(t.date, now));
+  // Busca apenas os do mês selecionado
+  const currentMonthTransactions = allTransactions.filter(t => t.date >= startOfMonth && t.date <= endOfMonth);
   const totalMes = currentMonthTransactions.reduce((acc, curr) => acc + curr.amount, 0);
   
   // Metas por categoria
   const categoryBudgets = await prisma.categoryBudget.findMany({ 
-    where: { month: now.getMonth() + 1, year: now.getFullYear() } 
+    where: { 
+      month: filterMonth, 
+      year: filterYear,
+      ...(filterCategory && { category: filterCategory })
+    } 
   });
 
   // Orçamento Geral agora é a soma de todas as metas
@@ -34,7 +49,7 @@ export default async function Home({ searchParams }) {
 
   // Process data for charts
   const historyMap = {};
-  transactions.forEach(t => {
+  allTransactions.forEach(t => {
     const m = format(t.date, 'MMM/yy', { locale: ptBR });
     historyMap[m] = (historyMap[m] || 0) + t.amount;
   });
@@ -75,6 +90,8 @@ export default async function Home({ searchParams }) {
         <h1>Finance Dashboard</h1>
         <p>Visão do Casal - Registros via Telegram</p>
       </header>
+
+      {isDefaultView && <DashboardFilter />}
 
       {(isDefaultView || isChartsView) && (
         <section className="summary-cards animate-fade-in delay-1">
@@ -135,7 +152,7 @@ export default async function Home({ searchParams }) {
       {(isDefaultView || isGastosView) && (
         <section className="animate-fade-in delay-3" style={{ marginTop: '3rem' }}>
           <h2 className="section-title">Tabela de Gastos {isDefaultView && "(Editável)"}</h2>
-          <TransactionsTable transactions={transactions} hideActions={!isDefaultView} />
+          <TransactionsTable transactions={currentMonthTransactions} hideActions={!isDefaultView} />
         </section>
       )}
     </main>
