@@ -145,11 +145,33 @@ export async function POST(req) {
         const categoryInput = parts.slice(1).join(' ').trim();
         
         if (isNaN(amount) || !categoryInput) {
-           await sendMessage(chatId, `⚠️ Formato inválido. Envie no formato: "Meta Moradia 2800"`);
+           await sendMessage(chatId, `⚠️ Formato inválido. Envie assim:\n\n<b>Meta Moradia 2800</b>\n\nCategorias disponíveis:\n• Alimentação\n• Transporte\n• Lazer\n• Saúde\n• Moradia\n• Contas/Cartão\n• Outros`);
            return NextResponse.json({ status: 'ignored' });
         }
-        
-        const category = categorize(categoryInput);
+
+        // Mapeamento direto do nome da categoria
+        const categoryMap = {
+          'alimentacao': 'Alimentação',
+          'alimentação': 'Alimentação',
+          'transporte': 'Transporte',
+          'lazer': 'Lazer',
+          'saude': 'Saúde',
+          'saúde': 'Saúde',
+          'moradia': 'Moradia',
+          'contas': 'Contas/Cartão',
+          'cartao': 'Contas/Cartão',
+          'cartão': 'Contas/Cartão',
+          'contas/cartão': 'Contas/Cartão',
+          'contas/cartao': 'Contas/Cartão',
+          'outros': 'Outros'
+        };
+
+        const category = categoryMap[categoryInput.toLowerCase()];
+
+        if (!category) {
+          await sendMessage(chatId, `⚠️ Categoria "<b>${categoryInput}</b>" não reconhecida.\n\nUse uma das categorias disponíveis:\n• Alimentação\n• Transporte\n• Lazer\n• Saúde\n• Moradia\n• Contas/Cartão\n• Outros`);
+          return NextResponse.json({ status: 'ignored' });
+        }
         
         const now = new Date();
         const month = now.getMonth() + 1;
@@ -162,7 +184,7 @@ export async function POST(req) {
           await prisma.categoryBudget.create({ data: { month, year, category, amount } });
         }
         
-        await sendMessage(chatId, `🎯 Meta de <b>${category}</b> para este mês (Mês ${month}) definida para R$ ${amount.toFixed(2)} com sucesso!`);
+        await sendMessage(chatId, `🎯 Meta de <b>${category}</b> para ${month}/${year} definida em <b>R$ ${amount.toFixed(2).replace('.', ',')}</b> com sucesso!`);
         return NextResponse.json({ status: 'success' });
       }
 

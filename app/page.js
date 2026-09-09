@@ -3,8 +3,9 @@ import { HistoryChart, DailyChart, CategoryChart, CategoryBudgetChart } from './
 import { BudgetForm } from './components/BudgetForm';
 import { ActiveBudgetsTable } from './components/ActiveBudgetsTable';
 import { TransactionsTable } from './components/TransactionsTable';
+import { AddTransactionForm } from './components/AddTransactionForm';
 import { DashboardFilter } from './components/DashboardFilter';
-import { format, isSameMonth } from 'date-fns';
+import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { deleteTransaction } from './actions';
 
@@ -152,6 +153,7 @@ export default async function Home({ searchParams }) {
       {(isDefaultView || isGastosView) && (
         <section className="animate-fade-in delay-3" style={{ marginTop: '3rem' }}>
           <h2 className="section-title">Tabela de Gastos {isDefaultView && "(Editável)"}</h2>
+          {isDefaultView && <AddTransactionForm />}
           <TransactionsTable transactions={currentMonthTransactions} hideActions={!isDefaultView} />
         </section>
       )}

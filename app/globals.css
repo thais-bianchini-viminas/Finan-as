@@ -338,6 +338,37 @@ body {
   }
 }
 
+/* Formulário de Novo Lançamento */
+.add-transaction-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 1rem;
+  align-items: flex-end;
+  background: rgba(16, 185, 129, 0.07);
+  padding: 1.5rem;
+  border-radius: 12px;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  margin-bottom: 1.5rem;
+}
+
+.add-transaction-form input,
+.add-transaction-form select {
+  background: rgba(30, 41, 59, 0.8);
+  border: 1px solid var(--card-border);
+  color: #fff;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  outline: none;
+  transition: border-color 0.2s;
+  width: 100%;
+}
+
+.add-transaction-form input:focus,
+.add-transaction-form select:focus {
+  border-color: var(--success);
+}
+
 /* Filtro */
 .dashboard-filter {
   display: flex;

@@ -14,6 +14,27 @@ export async function deleteTransaction(id) {
   }
 }
 
+export async function createTransaction(formData) {
+  const description = formData.get('description')?.toString().trim();
+  const amountStr = formData.get('amount')?.toString().replace(',', '.');
+  const amount = parseFloat(amountStr);
+  const category = formData.get('category')?.toString();
+  const senderName = formData.get('senderName')?.toString().trim() || 'Painel';
+  const dateStr = formData.get('date')?.toString();
+  const date = dateStr ? new Date(dateStr + 'T12:00:00') : new Date();
+
+  if (!description || isNaN(amount) || !category) return;
+
+  try {
+    await prisma.transaction.create({
+      data: { description, amount, category, senderName, date }
+    });
+    revalidatePath('/');
+  } catch (error) {
+    console.error("Erro ao criar transação:", error);
+  }
+}
+
 export async function setCategoryBudget(formData) {
   const category = formData.get('category');
   const amountStr = formData.get('amount').replace(',', '.');
