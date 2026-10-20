@@ -10,7 +10,11 @@ import { NotificationSettings } from './components/NotificationSettings';
 import { QuickAdd } from './components/QuickAdd';
 import { TransactionsList } from './components/TransactionsList';
 import { ThemeToggle } from './components/ThemeToggle';
-import { logout } from './actions';
+import { MonthSwipe } from './components/MonthSwipe';
+import { Splash } from './components/Splash';
+import { LogoutButton } from './components/LogoutButton';
+import { cookies } from 'next/headers';
+import { INTRO_COOKIE } from '../lib/auth-constants';
 import { authEnabled } from '../lib/auth';
 import { EXPENSE, FIXED, INCOME, categoriesFor, categoryNamesFor } from '../lib/categories';
 import { formatBRL, localParts, monthLabel, percent, shiftMonth } from '../lib/format';
@@ -78,8 +82,8 @@ export default async function Home({ searchParams }) {
   if (tab === 'metas') content = <MetasTab summary={summary} prevName={monthLabel(prev.month, prev.year).split(' ')[0]} />;
   if (tab === 'ajustes') content = <AjustesTab />;
 
-  return (
-    <div className={`app ${readOnly ? 'app-readonly' : ''}`}>
+  const showIntro = !readOnly && (await cookies()).get(INTRO_COOKIE)?.value === '1';
+  const header = (
       <AppHeader
         title={readOnly ? `Finanças · ${monthLabel(month, year)}` : monthLabel(month, year)}
         nav={readOnly ? null : {
@@ -91,8 +95,22 @@ export default async function Home({ searchParams }) {
         summary={summary}
         segment={readOnly ? null : segment}
       />
+  );
 
-      <main className="content">{content}</main>
+  return (
+    <div className={`app ${readOnly ? 'app-readonly' : ''}`}>
+      {showIntro && <Splash />}
+      {readOnly ? (
+        <>
+          {header}
+          <main className="content">{content}</main>
+        </>
+      ) : (
+        <MonthSwipe monthKey={`${year}-${month}`} prevHref={hrefFor({ ...prev, ...keep })} nextHref={hrefFor({ ...nextMonth, ...keep })}>
+          {header}
+          <main className="content">{content}</main>
+        </MonthSwipe>
+      )}
 
       {!readOnly && <BottomNav active={tab} hrefFor={hrefFor} />}
     </div>
@@ -391,11 +409,7 @@ async function AjustesTab() {
         <p className="muted small">Errou a categoria? Toque no botão certo na mensagem do bot. Ele aprende e acerta da próxima vez.</p>
       </section>
 
-      {authEnabled() && (
-        <form action={logout}>
-          <button type="submit" className="btn btn-ghost btn-block">Sair deste aparelho</button>
-        </form>
-      )}
+      {authEnabled() && <LogoutButton />}
     </div>
   );
 }

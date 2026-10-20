@@ -11,9 +11,9 @@ export function AppHeader({ title, nav, summary, segment }) {
         {nav ? (
           <>
             <ThemeToggle variant="icon" />
-            <Link href={nav.prev} className="header-btn" aria-label="Mês anterior">‹</Link>
+            <Link href={nav.prev} className="header-btn" aria-label="Mês anterior" data-month-nav="prev">‹</Link>
             <span className="header-month">{title}</span>
-            <Link href={nav.next} className="header-btn" aria-label="Próximo mês">›</Link>
+            <Link href={nav.next} className="header-btn" aria-label="Próximo mês" data-month-nav="next">›</Link>
             {nav.today && <Link href={nav.today} className="header-chip">Hoje</Link>}
             {/* No topo, o "+" não cobre valores da lista (antes ficava flutuando sobre o conteúdo). */}
             {nav.add && <Link href={nav.add} className="header-add" aria-label="Novo lançamento">+</Link>}
@@ -37,6 +37,12 @@ export function AppHeader({ title, nav, summary, segment }) {
             <span>Lance as receitas para ver o saldo</span>
           )}
         </span>
+        {summary.budget > 0 && (
+          <span className={`header-goal goal-${summary.pct > 100 ? 'over' : summary.pct >= 80 ? 'warn' : 'ok'}`}>
+            <span className="header-goal-bar"><span style={{ width: `${Math.min(summary.pct, 100)}%` }} /></span>
+            <span>🎯 Meta {formatBRL(summary.budget)} · {summary.pct.toFixed(0)}%</span>
+          </span>
+        )}
       </div>
 
       {segment && (
