@@ -1,50 +1,53 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import prisma from '../../../lib/prisma';
-import { CATEGORIES, categorize, categoryInfo, normalize, resolveCategory } from '../../../lib/categories';
-import { formatBRL, localParts, monthLabel, monthRange, parseAmount, percent } from '../../../lib/format';
-import { copyBudgetsFromPreviousMonth, getMonthSummary, upsertBudget } from '../../../lib/finance';
+import { CATEGORIES, EXPENSE, FIXED, INCOME, INCOME_CATEGORIES, VARIABLE, categoriesFor, categoryInfo, detectType, normalize, resolveCategory } from '../../../lib/categories';
+import { classify, SOURCE_LABEL } from '../../../lib/classifier';
+import { formatBRL, localParts, monthLabel, parseAmount } from '../../../lib/format';
+import { categoryStatus, copyBudgetsFromPreviousMonth, getBudgetSuggestion, getMonthSummary, upsertBudget } from '../../../lib/finance';
+import { defaultFixedKeys, suggestedBudgets } from '../../../lib/budgets';
+import { budgetLineHtml, notifyTransaction } from '../../../lib/notify';
 import { appUrl, authEnabled, safeEqual, screenshotKey } from '../../../lib/auth';
-import { answerCallbackQuery, editMessageText, escapeHtml, progressBar, sendMessage, sendPhoto, statusEmoji } from '../../../lib/telegram';
+import { answerCallbackQuery, editMessageText, escapeHtml, isAllowedChat, progressBar, sendMessage, sendPhoto, statusEmoji } from '../../../lib/telegram';
 
 export const dynamic = 'force-dynamic';
 
 const HELP = `🤖 <b>Como usar</b>
 
-<b>Lançar gasto</b> — descrição e valor:
+<b>Despesa</b> — descrição e valor:
 • <code>Mercado 230,50</code>
 • <code>Uber 18 #lazer</code> (força a categoria)
 • Vários de uma vez, um por linha.
+O bot aprende: se você corrigir a categoria, da próxima vez ele acerta.
+
+<b>Receita</b> — comece com <code>+</code> ou <code>recebi</code>:
+• <code>+5000 salário</code>
+• <code>recebi 800 freela</code>
+
+<b>Custo fixo x gasto variável</b>
+Custo fixo é o que se repete todo mês (financiamento, internet, luz, fatura). Gasto variável é o do dia a dia. O bot identifica sozinho, e um botão permite trocar.
 
 <b>Metas</b>
-• <code>meta alimentação 1500</code>
-• Várias de uma vez:
-<code>metas
-alimentação 1500
-moradia 2800
-lazer 400</code>
+• <code>gerar metas</code> — cria as metas do mês pelo histórico de 3 meses
 • <code>metas</code> — mostra as metas e quanto já foi usado
-• <code>copiar metas</code> — repete as metas do mês passado
-• <code>meta lazer 0</code> — remove a meta
+• <code>meta alimentação 1500</code> ou várias, uma por linha após <code>metas</code>
+• <code>copiar metas</code> — repete as do mês passado
+• <code>meta lazer 0</code> — remove
 
 <b>Consultas</b>
-• <code>resumo</code> — visão do mês
+• <code>resumo</code> — saldo, receitas, despesas e metas
 • <code>painel</code> / <code>gastos</code> — imagem do painel
-• <code>app</code> — link do app para instalar no celular
+• <code>app</code> — link do app
 
-Categorias: ${CATEGORIES.map(c => `${c.emoji} ${c.name}`).join(', ')}`;
+Categorias: ${CATEGORIES.map(c => `${c.emoji} ${c.name}`).join(', ')}
+Receitas: ${INCOME_CATEGORIES.map(c => `${c.emoji} ${c.name}`).join(', ')}`;
 
-// Se ALLOWED_CHAT_IDS estiver definido, só esses chats podem usar o bot.
-function isAllowed(chatId) {
-  const allowed = (process.env.ALLOWED_CHAT_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
-  return allowed.length === 0 || allowed.includes(chatId);
-}
-
-function parseExpense(line) {
-  const tokens = line.trim().split(/\s+/).filter(Boolean);
+function parseEntry(line) {
+  const { type, text } = detectType(line);
+  const tokens = text.trim().split(/\s+/).filter(Boolean);
   let forcedCategory = null;
   const rest = [];
   for (const token of tokens) {
-    const resolved = token.startsWith('#') ? resolveCategory(token) : null;
+    const resolved = token.startsWith('#') ? resolveCategory(token, type) : null;
     if (resolved) forcedCategory = resolved;
     else rest.push(token);
   }
@@ -59,7 +62,7 @@ function parseExpense(line) {
   // "Barbeiro: 60" e "Uber - 15" chegam com pontuação sobrando antes do valor.
   const description = descriptionTokens.filter(t => !/^r\$$/i.test(t)).join(' ').replace(/[\s:=\-–]+$/, '').trim();
   if (!(amount > 0) || !description) return null;
-  return { description, amount, category: forcedCategory || categorize(description) };
+  return { description, amount, type, forcedCategory };
 }
 
 function parseBudgetLine(line) {
@@ -69,42 +72,30 @@ function parseBudgetLine(line) {
   return { input: line.trim(), amount, category: resolveCategory(categoryInput) };
 }
 
-async function categoryStatus(category, date = new Date()) {
-  const { month, year } = localParts(date);
-  const { start, end } = monthRange(month, year);
-  const [agg, budget] = await Promise.all([
-    prisma.transaction.aggregate({ _sum: { amount: true }, where: { category, date: { gte: start, lt: end } } }),
-    prisma.categoryBudget.findFirst({ where: { category, month, year } }),
-  ]);
-  const spent = agg._sum.amount || 0;
-  return { spent, budget: budget?.amount || 0 };
-}
-
-function budgetLine(category, { spent, budget }, added = 0) {
-  if (!budget) return `📊 ${escapeHtml(category)} no mês: ${formatBRL(spent)} (sem meta — envie <code>meta ${escapeHtml(normalize(category).split('/')[0])} valor</code>)`;
-  const pct = percent(spent, budget);
-  const before = percent(spent - added, budget);
-  let line = `${statusEmoji(pct, true)} ${escapeHtml(category)}: ${formatBRL(spent)} de ${formatBRL(budget)} (${pct.toFixed(0)}%)\n${progressBar(pct)}`;
-  if (before <= 100 && pct > 100) line += `\n🚨 <b>Meta estourada em ${formatBRL(spent - budget)}!</b>`;
-  else if (before < 80 && pct >= 80) line += `\n⚠️ <b>Atenção: 80% da meta usada.</b> Restam ${formatBRL(budget - spent)}.`;
-  else if (pct <= 100) line += `\nRestam ${formatBRL(budget - spent)}.`;
-  return line;
-}
-
-function expenseKeyboard(transaction) {
-  const buttons = CATEGORIES.map((c, i) => ({
-    text: `${c.name === transaction.category ? '✓ ' : ''}${c.emoji} ${c.name}`,
-    callback_data: `c:${transaction.id}:${i}`,
+function transactionKeyboard(tx) {
+  const list = categoriesFor(tx.type);
+  const buttons = list.map((c, i) => ({
+    text: `${c.name === tx.category ? '✓ ' : ''}${c.emoji} ${c.name}`,
+    callback_data: `c:${tx.id}:${i}`,
   }));
   const rows = [];
   for (let i = 0; i < buttons.length; i += 2) rows.push(buttons.slice(i, i + 2));
-  rows.push([{ text: '🗑️ Desfazer', callback_data: `d:${transaction.id}` }]);
+  const last = [{ text: '🗑️ Desfazer', callback_data: `d:${tx.id}` }];
+  if (tx.type !== INCOME) {
+    last.unshift({ text: tx.kind === FIXED ? '🔄 É gasto variável' : '📌 É custo fixo', callback_data: `k:${tx.id}` });
+  }
+  rows.push(last);
   return { inline_keyboard: rows };
 }
 
-function expenseText(transaction, status, added) {
-  const info = categoryInfo(transaction.category);
-  return `✅ <b>${escapeHtml(transaction.description)}</b> · ${formatBRL(transaction.amount)}\n${info.emoji} ${escapeHtml(transaction.category)} · por ${escapeHtml(transaction.senderName)}\n\n${budgetLine(transaction.category, status, added)}\n\n<i>Categoria errada? Toque para trocar.</i>`;
+function transactionText(tx, { status, source }) {
+  const info = categoryInfo(tx.category);
+  const how = source ? ` <i>(${SOURCE_LABEL[source]})</i>` : '';
+  if (tx.type === INCOME) {
+    return `💰 <b>Receita: ${escapeHtml(tx.description)}</b> · ${formatBRL(tx.amount)}\n${info.emoji} ${escapeHtml(tx.category)}${how} · por ${escapeHtml(tx.senderName)}\n\n<i>Categoria errada? Toque para trocar.</i>`;
+  }
+  const kind = tx.kind === FIXED ? '📌 Custo fixo' : '🛒 Gasto variável';
+  return `✅ <b>${escapeHtml(tx.description)}</b> · ${formatBRL(tx.amount)}\n${info.emoji} ${escapeHtml(tx.category)}${how}\n${kind} · por ${escapeHtml(tx.senderName)}\n\n${budgetLineHtml(tx.category, status, tx.amount)}\n\n<i>Algo errado? Toque para corrigir.</i>`;
 }
 
 function summaryText(summary, { onlyBudgets = false } = {}) {
@@ -118,29 +109,31 @@ function summaryText(summary, { onlyBudgets = false } = {}) {
     });
 
   if (onlyBudgets) {
-    if (!rows.length) return `🎯 Nenhuma meta para <b>${title}</b>.\n\nEnvie por exemplo:\n<code>metas\nalimentação 1500\nmoradia 2800</code>\n\nou <code>copiar metas</code> para repetir as do mês passado.`;
+    if (!rows.length) return `🎯 Nenhuma meta para <b>${title}</b>.\n\nEnvie <code>gerar metas</code> para criar pelo histórico, ou <code>copiar metas</code> para repetir as do mês passado.`;
     return `🎯 <b>Metas de ${title}</b>\nTotal: ${formatBRL(summary.budget)}\n\n${rows.join('\n')}\n\nPara alterar: <code>meta lazer 500</code>`;
   }
 
   const lines = [`📊 <b>Resumo de ${title}</b>`, ''];
+  if (summary.income > 0) {
+    lines.push(`💰 Receitas: ${formatBRL(summary.income)}`);
+    lines.push(`💸 Despesas: ${formatBRL(summary.spent)}`);
+    lines.push(`${summary.balance >= 0 ? '🟢' : '🔴'} <b>Saldo: ${formatBRL(summary.balance)}</b> (${summary.savingsRate.toFixed(0)}% da renda)`);
+    lines.push('');
+  }
   if (summary.budget > 0) {
-    lines.push(`💸 ${formatBRL(summary.spent)} de ${formatBRL(summary.budget)} (${summary.pct.toFixed(0)}%)`);
+    lines.push(`🎯 ${formatBRL(summary.spent)} de ${formatBRL(summary.budget)} planejados (${summary.pct.toFixed(0)}%)`);
     lines.push(progressBar(summary.pct, 14));
   } else {
     lines.push(`💸 Gasto: ${formatBRL(summary.spent)} · sem metas definidas`);
   }
+  lines.push(`📌 Custos fixos ${formatBRL(summary.fixedSpent)} · 🛒 variáveis ${formatBRL(summary.variableSpent)}`);
   if (summary.isCurrent) {
     lines.push(`📅 Dia ${summary.elapsedDays} de ${summary.totalDays}`);
     if (summary.dailyAllowance !== null) lines.push(`💡 Dá para gastar ${formatBRL(summary.dailyAllowance)}/dia até o fim do mês`);
-    if (summary.spent > 0) lines.push(`📈 No ritmo atual o mês fecha em ${formatBRL(summary.projection)}`);
+    if (summary.spent > 0) lines.push(`📈 No ritmo atual as despesas fecham em ${formatBRL(summary.projection)}`);
   }
   if (rows.length) lines.push('', ...rows);
   return lines.join('\n');
-}
-
-async function notifyOthers(chatId, text) {
-  const users = await prisma.telegramUser.findMany();
-  await Promise.all(users.filter(u => u.chatId !== chatId && isAllowed(u.chatId)).map(u => sendMessage(u.chatId, text)));
 }
 
 function screenshotUrl(view) {
@@ -152,7 +145,7 @@ function screenshotUrl(view) {
 
 const appButton = { inline_keyboard: [[{ text: '📱 Abrir o app', url: appUrl() }]] };
 
-async function handleBudgets(chatId, senderName, lines) {
+async function handleBudgets(chatId, lines) {
   const now = localParts();
   const entries = lines.map(parseBudgetLine);
   const invalid = entries.filter(e => !e.category || Number.isNaN(e.amount));
@@ -168,38 +161,74 @@ async function handleBudgets(chatId, senderName, lines) {
     text += `${text ? '\n\n' : ''}⚠️ Não entendi: ${invalid.map(e => `<code>${escapeHtml(e.input)}</code>`).join(', ')}\nUse <code>categoria valor</code>, ex.: <code>moradia 2800</code>.`;
   }
   await sendMessage(chatId, text);
-  if (valid.length) {
-    await notifyOthers(chatId, `🎯 ${escapeHtml(senderName)} atualizou as metas: ${valid.map(e => `${e.category} ${formatBRL(e.amount)}`).join(', ')}`);
-  }
 }
 
-async function handleExpenses(chatId, senderName, lines) {
-  const parsed = lines.map(line => ({ line, expense: parseExpense(line) }));
-  const failed = parsed.filter(p => !p.expense);
-  const ok = parsed.filter(p => p.expense);
+async function handleGenerateBudgets(chatId) {
+  const now = localParts();
+  const suggestion = await getBudgetSuggestion(now.month, now.year, 3);
+  const keys = defaultFixedKeys(suggestion);
+  const values = suggestedBudgets(suggestion, keys);
+  const entries = Object.entries(values).filter(([, v]) => v > 0);
+  if (!entries.length) {
+    await sendMessage(chatId, '⚠️ Ainda não há histórico suficiente para gerar metas. Lance alguns gastos e tente no mês que vem.');
+    return;
+  }
+  await Promise.all(Object.entries(values).map(([category, amount]) => upsertBudget(now.month, now.year, category, amount)));
+
+  const fixed = suggestion.fixedItems.filter(i => keys.includes(i.key));
+  const lines = [
+    `✨ <b>Metas de ${monthLabel(now.month, now.year)} geradas</b> pela média de ${suggestion.months} mês(es).`,
+    '',
+    ...entries.map(([category, amount]) => `${categoryInfo(category).emoji} ${escapeHtml(category)}: <b>${formatBRL(amount)}</b>`),
+    '',
+    `Total: <b>${formatBRL(entries.reduce((a, [, v]) => a + v, 0))}</b>`,
+  ];
+  if (fixed.length) {
+    lines.push('', '📌 Custos fixos incluídos:', ...fixed.map(i => `• ${escapeHtml(i.description)} ${formatBRL(i.amount)}`));
+  }
+  lines.push('', 'Para ajustar: <code>meta lazer 300</code>, ou pela aba <b>Metas</b> do app, onde dá para tirar ou incluir cada custo fixo.');
+  await sendMessage(chatId, lines.join('\n'), appButton);
+}
+
+async function handleTransactions(chatId, senderName, lines) {
+  const parsed = lines.map(line => ({ line, entry: parseEntry(line) }));
+  const failed = parsed.filter(p => !p.entry);
+  const ok = parsed.filter(p => p.entry);
 
   if (!ok.length) {
-    await sendMessage(chatId, `⚠️ Não entendi, ${escapeHtml(senderName)}. Envie <code>descrição valor</code>, ex.: <code>Almoço 35,50</code>.\n\nDigite <code>ajuda</code> para ver todos os comandos.`);
+    await sendMessage(chatId, `⚠️ Não entendi, ${escapeHtml(senderName)}. Envie <code>descrição valor</code>, ex.: <code>Almoço 35,50</code>, ou <code>+5000 salário</code> para receita.\n\nDigite <code>ajuda</code> para ver todos os comandos.`);
     return;
   }
 
+  // Histórico carregado uma vez por tipo, para classificar todas as linhas.
+  const histories = {};
+  const historyFor = async (type) => (histories[type] ||= await prisma.transaction.findMany({
+    where: { type }, select: { description: true, category: true, kind: true }, orderBy: { date: 'desc' }, take: 600,
+  }));
+
   const created = [];
-  for (const { expense } of ok) {
-    created.push(await prisma.transaction.create({ data: { ...expense, senderName } }));
+  for (const { entry } of ok) {
+    const result = await classify(entry.description, entry.type, await historyFor(entry.type));
+    const category = entry.forcedCategory || result.category;
+    const tx = await prisma.transaction.create({
+      data: { description: entry.description, amount: entry.amount, type: entry.type, category, kind: entry.type === INCOME ? VARIABLE : result.kind, senderName },
+    });
+    created.push({ tx, source: entry.forcedCategory ? 'manual' : result.source });
   }
 
   if (created.length === 1) {
-    const [tx] = created;
-    const status = await categoryStatus(tx.category, tx.date);
-    await sendMessage(chatId, expenseText(tx, status, tx.amount), expenseKeyboard(tx));
-    await notifyOthers(chatId, `🔔 ${escapeHtml(senderName)} registrou <b>${escapeHtml(tx.description)}</b> · ${formatBRL(tx.amount)} (${escapeHtml(tx.category)})\n${budgetLine(tx.category, status, tx.amount)}`);
+    const [{ tx, source }] = created;
+    const status = tx.type === INCOME ? null : await categoryStatus(tx.category, tx.date);
+    await sendMessage(chatId, transactionText(tx, { status, source }), transactionKeyboard(tx));
   } else {
-    const total = created.reduce((acc, t) => acc + t.amount, 0);
-    const list = created.map(t => `${categoryInfo(t.category).emoji} ${escapeHtml(t.description)} · ${formatBRL(t.amount)}`).join('\n');
-    const keyboard = { inline_keyboard: created.map(t => [{ text: `🗑️ ${t.description} ${formatBRL(t.amount)}`.slice(0, 60), callback_data: `d:${t.id}` }]) };
-    await sendMessage(chatId, `✅ <b>${created.length} gastos registrados</b> (${formatBRL(total)})\n\n${list}`, keyboard);
-    await notifyOthers(chatId, `🔔 ${escapeHtml(senderName)} registrou ${created.length} gastos (${formatBRL(total)}):\n\n${list}`);
+    const total = (type) => created.filter(c => c.tx.type === type).reduce((acc, c) => acc + c.tx.amount, 0);
+    const list = created.map(({ tx }) => `${tx.type === INCOME ? '💰' : categoryInfo(tx.category).emoji} ${escapeHtml(tx.description)} · ${formatBRL(tx.amount)} <i>(${escapeHtml(tx.category)}${tx.kind === FIXED ? ', fixo' : ''})</i>`).join('\n');
+    const keyboard = { inline_keyboard: created.map(({ tx }) => [{ text: `🗑️ ${tx.description} ${formatBRL(tx.amount)}`.slice(0, 60), callback_data: `d:${tx.id}` }]) };
+    const totals = [total(EXPENSE) && `despesas ${formatBRL(total(EXPENSE))}`, total(INCOME) && `receitas ${formatBRL(total(INCOME))}`].filter(Boolean).join(' · ');
+    await sendMessage(chatId, `✅ <b>${created.length} lançamentos registrados</b> (${totals})\n\n${list}`, keyboard);
   }
+
+  after(() => Promise.all(created.map(({ tx }) => notifyTransaction(tx, { fromChatId: chatId }))));
 
   if (failed.length) {
     await sendMessage(chatId, `⚠️ Estas linhas não foram registradas: ${failed.map(f => `<code>${escapeHtml(f.line)}</code>`).join(', ')}`);
@@ -210,7 +239,7 @@ async function handleMessage(message) {
   const chatId = message.chat.id.toString();
   const senderName = message.from?.first_name || 'Usuário';
 
-  if (!isAllowed(chatId)) {
+  if (!isAllowedChat(chatId)) {
     await sendMessage(chatId, `🔒 Este bot é privado.\nSeu chat ID é <code>${chatId}</code>.`);
     return;
   }
@@ -240,10 +269,15 @@ async function handleMessage(message) {
     return;
   }
 
+  if (otherLines.length === 0 && ['gerar metas', 'gerar', 'gerarmetas', 'metas automaticas'].includes(head)) {
+    await handleGenerateBudgets(chatId);
+    return;
+  }
+
   if (head === 'copiar metas' || head === 'copiar') {
     const { copied, sourceCount, prev } = await copyBudgetsFromPreviousMonth(now.month, now.year);
     if (!sourceCount) {
-      await sendMessage(chatId, `⚠️ ${monthLabel(prev.month, prev.year)} não tem metas para copiar.`);
+      await sendMessage(chatId, `⚠️ ${monthLabel(prev.month, prev.year)} não tem metas para copiar. Tente <code>gerar metas</code>.`);
       return;
     }
     const summary = await getMonthSummary(now.month, now.year);
@@ -257,7 +291,7 @@ async function handleMessage(message) {
       await sendMessage(chatId, summaryText(await getMonthSummary(now.month, now.year), { onlyBudgets: true }));
       return;
     }
-    await handleBudgets(chatId, senderName, budgetLines);
+    await handleBudgets(chatId, budgetLines);
     return;
   }
 
@@ -272,13 +306,13 @@ async function handleMessage(message) {
     return;
   }
 
-  await handleExpenses(chatId, senderName, lines);
+  await handleTransactions(chatId, senderName, lines);
 }
 
 async function handleCallback(query) {
   const chatId = query.message.chat.id.toString();
   const messageId = query.message.message_id;
-  if (!isAllowed(chatId)) {
+  if (!isAllowedChat(chatId)) {
     await answerCallbackQuery(query.id, 'Não autorizado.');
     return;
   }
@@ -287,36 +321,41 @@ async function handleCallback(query) {
   const data = query.data || '';
   const deleteMatch = data.match(/^(?:d:|delete_)(\d+)$/);
   const categoryMatch = data.match(/^c:(\d+):(\d+)$/);
+  const kindMatch = data.match(/^k:(\d+)$/);
+  const id = parseInt((deleteMatch || categoryMatch || kindMatch)?.[1], 10);
+  const tx = Number.isFinite(id) ? await prisma.transaction.findUnique({ where: { id } }) : null;
+
+  if ((deleteMatch || categoryMatch || kindMatch) && !tx) {
+    await answerCallbackQuery(query.id, 'Esse lançamento já foi excluído.');
+    return;
+  }
 
   if (deleteMatch) {
-    const id = parseInt(deleteMatch[1], 10);
-    const tx = await prisma.transaction.findUnique({ where: { id } });
-    if (!tx) {
-      await answerCallbackQuery(query.id, 'Esse gasto já foi excluído.');
-      return;
-    }
     await prisma.transaction.delete({ where: { id } });
-    await answerCallbackQuery(query.id, 'Gasto excluído!');
+    await answerCallbackQuery(query.id, 'Lançamento excluído!');
     await editMessageText(chatId, messageId, `🗑️ <s>${escapeHtml(tx.description)} · ${formatBRL(tx.amount)}</s>\nExcluído do painel.`);
     return;
   }
 
+  let updated = null;
   if (categoryMatch) {
-    const id = parseInt(categoryMatch[1], 10);
-    const category = CATEGORIES[parseInt(categoryMatch[2], 10)]?.name;
-    const tx = category && await prisma.transaction.findUnique({ where: { id } });
-    if (!tx) {
-      await answerCallbackQuery(query.id, 'Gasto não encontrado.');
+    const category = categoriesFor(tx.type)[parseInt(categoryMatch[2], 10)]?.name;
+    if (!category || tx.category === category) {
+      await answerCallbackQuery(query.id, category ? `Já está em ${category}.` : 'Categoria inválida.');
       return;
     }
-    if (tx.category === category) {
-      await answerCallbackQuery(query.id, `Já está em ${category}.`);
-      return;
-    }
-    const updated = await prisma.transaction.update({ where: { id }, data: { category } });
-    const status = await categoryStatus(category, updated.date);
-    await answerCallbackQuery(query.id, `Movido para ${category}`);
-    await editMessageText(chatId, messageId, expenseText(updated, status, updated.amount), expenseKeyboard(updated));
+    updated = await prisma.transaction.update({ where: { id }, data: { category } });
+    await answerCallbackQuery(query.id, `Movido para ${category}. Vou lembrar disso!`);
+  }
+  if (kindMatch && tx.type !== INCOME) {
+    const kind = tx.kind === FIXED ? VARIABLE : FIXED;
+    updated = await prisma.transaction.update({ where: { id }, data: { kind } });
+    await answerCallbackQuery(query.id, kind === FIXED ? 'Marcado como custo fixo.' : 'Marcado como gasto variável.');
+  }
+
+  if (updated) {
+    const status = updated.type === INCOME ? null : await categoryStatus(updated.category, updated.date);
+    await editMessageText(chatId, messageId, transactionText(updated, { status, source: 'manual' }), transactionKeyboard(updated));
     return;
   }
 
@@ -337,6 +376,6 @@ export async function POST(req) {
   } catch (error) {
     console.error('Webhook error:', error);
   }
-  // Sempre 200: um erro aqui faria o Telegram reenviar a mesma mensagem e duplicar gastos.
+  // Sempre 200: um erro aqui faria o Telegram reenviar a mesma mensagem e duplicar lançamentos.
   return NextResponse.json({ status: 'ok' });
 }

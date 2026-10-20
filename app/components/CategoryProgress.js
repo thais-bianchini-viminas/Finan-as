@@ -24,7 +24,7 @@ export function CategoryProgress({ categories, hrefFor }) {
           const content = (
             <>
               <div className="progress-head">
-                <span className="cat-dot" style={{ background: info.color }} aria-hidden>{info.emoji}</span>
+                <span className="cat-dot" style={{ background: `${info.color}22` }} aria-hidden>{info.emoji}</span>
                 <span className="progress-name">{c.name}</span>
                 <span className="progress-values">
                   <strong>{formatBRL(c.spent)}</strong>
@@ -45,7 +45,7 @@ export function CategoryProgress({ categories, hrefFor }) {
           );
           return (
             <li key={c.name}>
-              {hrefFor ? <Link href={hrefFor({ tab: 'gastos', category: c.name })} className="progress-item">{content}</Link> : <div className="progress-item">{content}</div>}
+              {hrefFor ? <Link href={hrefFor({ tab: 'lancamentos', tipo: 'despesa', category: c.name })} className="progress-item">{content}</Link> : <div className="progress-item">{content}</div>}
             </li>
           );
         })}

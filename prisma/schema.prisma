@@ -20,8 +20,20 @@ model Transaction {
   category    String
   senderName  String   @default("Usuário") // Adicionado
   date        DateTime @default(now())
+  type        String   @default("despesa") // despesa | receita
+  kind        String   @default("variavel") // fixo (custo recorrente) | variavel (gasto do dia a dia)
 
   @@index([date])
+}
+
+// Inscrições de notificação push do app (uma por aparelho/navegador).
+model PushSubscription {
+  id        Int      @id @default(autoincrement())
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userName  String
+  createdAt DateTime @default(now())
 }
 
 model Budget {

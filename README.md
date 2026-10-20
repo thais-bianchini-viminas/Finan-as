@@ -1,38 +1,35 @@
 # Finanças do Casal
 
-App (PWA instalável no celular) + bot do Telegram para lançar gastos e acompanhar metas por categoria.
+App (PWA instalável no celular) + bot do Telegram para lançar despesas e receitas, separar custos fixos de gastos variáveis e acompanhar metas por categoria.
 
 ## Uso no dia a dia
 
-**App** — abra a URL no celular e instale (Android: botão *Instalar*; iPhone: Safari → Compartilhar → *Adicionar à Tela de Início*). Pressionar o ícone dá atalhos direto para *Lançar* e *Metas*.
+**App:** abra a URL no celular e instale (Android: botão *Instalar*; iPhone: Safari → Compartilhar → *Adicionar à Tela de Início*). Pressionar o ícone dá atalhos para lançar despesa, receita ou abrir as metas.
 
 | Aba | O que faz |
 | --- | --- |
-| Resumo | Gasto x planejado, quanto dá para gastar por dia, projeção do mês, metas por categoria, ritmo, histórico |
-| Gastos | Lista por dia, filtro por categoria, toque para editar/excluir |
-| Lançar | Valor + descrição; categoria sugerida automaticamente; lembra quem lançou |
-| Metas | Todas as categorias numa tela, salvar de uma vez, copiar do mês anterior, sugestão pela média de 3 meses |
-
-As setas no topo trocam o mês (inclusive para planejar metas de meses futuros).
+| Resumo | Saldo do mês no cabeçalho, Despesas/Receitas, rosca por categoria, destaques, metas, custos fixos x variáveis, regra 50/30/20, ritmo e histórico |
+| Lançamentos | Tudo / Despesas / Receitas, filtro por categoria, toque para editar, trocar categoria, marcar como fixo ou excluir |
+| **+** | Lançar despesa ou receita; categoria e fixo/variável sugeridos pelo histórico |
+| Metas | Gerar pelo histórico de 3 meses (custos fixos marcáveis + média do variável), ajustar e salvar |
+| Ajustes | Ativar notificações no aparelho, instalar o app, comandos do bot, sair |
 
 **Telegram**
 
 ```
-Mercado 230,50          → lança (categoria automática, botões para trocar)
+Mercado 230,50          → despesa (categoria e fixo/variável automáticos, botões para corrigir)
 Uber 18 #lazer          → força a categoria
-Almoço 35               → várias linhas = vários gastos
-Uber 22
-
-metas                   → metas do mês e quanto já foi usado
-metas                   → define várias de uma vez
-alimentação 1500
-moradia 2800
-meta lazer 0            → remove
-copiar metas            → repete as do mês passado
++5000 salário           → receita (também: "recebi 800 freela")
+gerar metas             → metas do mês pelo histórico
+metas | meta lazer 300 | copiar metas
 resumo | painel | gastos | app | ajuda
 ```
 
-O bot avisa quando uma categoria passa de 80% e de 100% da meta.
+O classificador aprende: toda correção feita pelos botões do bot ou no app passa a valer para lançamentos parecidos.
+
+### Custo fixo x gasto variável
+- **Custo fixo:** se repete todo mês (financiamento, aluguel, internet, luz, água, telefone, fatura, assinaturas). Entra automaticamente na geração de metas, e cada item pode ser desmarcado no mês em que não acontece.
+- **Gasto variável:** consumo do dia a dia. Nas metas entra pela média dos últimos 3 meses.
 
 ## Configuração
 
@@ -41,8 +38,6 @@ Variáveis em `.env.example`. Depois de definir no Vercel, rode uma vez:
 ```bash
 npm run setup-bot   # registra webhook com segredo + menu de comandos
 ```
-
-Para descobrir os chat IDs para `ALLOWED_CHAT_IDS`: com a variável definida, quem não estiver na lista recebe o próprio ID ao mandar mensagem ao bot.
 
 ## Desenvolvimento
 

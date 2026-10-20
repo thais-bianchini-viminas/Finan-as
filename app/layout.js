@@ -5,13 +5,13 @@ export const metadata = {
   title: 'Finanças do Casal',
   description: 'Controle de gastos e metas do casal, integrado ao Telegram',
   applicationName: 'Finanças',
-  appleWebApp: { capable: true, title: 'Finanças', statusBarStyle: 'black-translucent' },
+  appleWebApp: { capable: true, title: 'Finanças', statusBarStyle: 'default' },
   icons: { apple: '/pwa-icon/180' },
   formatDetection: { telephone: false },
 }
 
 export const viewport = {
-  themeColor: '#0b1120',
+  themeColor: '#1f9d63',
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',

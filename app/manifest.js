@@ -7,8 +7,8 @@ export default function manifest() {
     scope: '/',
     display: 'standalone',
     orientation: 'portrait',
-    background_color: '#0b1120',
-    theme_color: '#0b1120',
+    background_color: '#f2f5f3',
+    theme_color: '#1f9d63',
     lang: 'pt-BR',
     icons: [
       { src: '/pwa-icon/192', sizes: '192x192', type: 'image/png', purpose: 'any' },
@@ -17,7 +17,8 @@ export default function manifest() {
     ],
     // Atalhos ao pressionar o ícone (Android).
     shortcuts: [
-      { name: 'Lançar gasto', short_name: 'Lançar', url: '/?tab=lancar', icons: [{ src: '/pwa-icon/192', sizes: '192x192' }] },
+      { name: 'Lançar despesa', short_name: 'Despesa', url: '/?tab=lancar', icons: [{ src: '/pwa-icon/192', sizes: '192x192' }] },
+      { name: 'Lançar receita', short_name: 'Receita', url: '/?tab=lancar&tipo=receita', icons: [{ src: '/pwa-icon/192', sizes: '192x192' }] },
       { name: 'Metas do mês', short_name: 'Metas', url: '/?tab=metas', icons: [{ src: '/pwa-icon/192', sizes: '192x192' }] },
     ],
   };
