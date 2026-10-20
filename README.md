@@ -1,36 +1,54 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Finanças do Casal
 
-## Getting Started
+App (PWA instalável no celular) + bot do Telegram para lançar gastos e acompanhar metas por categoria.
 
-First, run the development server:
+## Uso no dia a dia
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+**App** — abra a URL no celular e instale (Android: botão *Instalar*; iPhone: Safari → Compartilhar → *Adicionar à Tela de Início*). Pressionar o ícone dá atalhos direto para *Lançar* e *Metas*.
+
+| Aba | O que faz |
+| --- | --- |
+| Resumo | Gasto x planejado, quanto dá para gastar por dia, projeção do mês, metas por categoria, ritmo, histórico |
+| Gastos | Lista por dia, filtro por categoria, toque para editar/excluir |
+| Lançar | Valor + descrição; categoria sugerida automaticamente; lembra quem lançou |
+| Metas | Todas as categorias numa tela, salvar de uma vez, copiar do mês anterior, sugestão pela média de 3 meses |
+
+As setas no topo trocam o mês (inclusive para planejar metas de meses futuros).
+
+**Telegram**
+
+```
+Mercado 230,50          → lança (categoria automática, botões para trocar)
+Uber 18 #lazer          → força a categoria
+Almoço 35               → várias linhas = vários gastos
+Uber 22
+
+metas                   → metas do mês e quanto já foi usado
+metas                   → define várias de uma vez
+alimentação 1500
+moradia 2800
+meta lazer 0            → remove
+copiar metas            → repete as do mês passado
+resumo | painel | gastos | app | ajuda
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+O bot avisa quando uma categoria passa de 80% e de 100% da meta.
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+## Configuração
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Variáveis em `.env.example`. Depois de definir no Vercel, rode uma vez:
 
-## Learn More
+```bash
+npm run setup-bot   # registra webhook com segredo + menu de comandos
+```
 
-To learn more about Next.js, take a look at the following resources:
+Para descobrir os chat IDs para `ALLOWED_CHAT_IDS`: com a variável definida, quem não estiver na lista recebe o próprio ID ao mandar mensagem ao bot.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Desenvolvimento
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm install
+npm run dev
+```
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+> `npm run build` executa `prisma db push` no banco configurado em `DATABASE_URL`.

@@ -1,0 +1,13 @@
+.env
+.env.local
+*.zip
+*.db
+node_modules
+.next
+app/generated
+check-users.js
+clear.mjs
+wipe.js
+test.js
+test-pdf.js
+test-screenshot.js

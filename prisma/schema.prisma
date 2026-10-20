@@ -20,6 +20,8 @@ model Transaction {
   category    String
   senderName  String   @default("Usuário") // Adicionado
   date        DateTime @default(now())
+
+  @@index([date])
 }
 
 model Budget {
@@ -40,4 +42,6 @@ model CategoryBudget {
   year     Int
   category String
   amount   Float
+
+  @@index([year, month])
 }
