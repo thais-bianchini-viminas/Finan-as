@@ -7,8 +7,8 @@ export default function manifest() {
     scope: '/',
     display: 'standalone',
     orientation: 'portrait',
-    background_color: '#f2f5f3',
-    theme_color: '#1f9d63',
+    background_color: '#0b1120',
+    theme_color: '#0b1120',
     lang: 'pt-BR',
     icons: [
       { src: '/pwa-icon/192', sizes: '192x192', type: 'image/png', purpose: 'any' },

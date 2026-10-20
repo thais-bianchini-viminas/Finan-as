@@ -7,7 +7,12 @@ import { categoryStatus, copyBudgetsFromPreviousMonth, getBudgetSuggestion, getM
 import { defaultFixedKeys, suggestedBudgets } from '../../../lib/budgets';
 import { budgetLineHtml, notifyTransaction } from '../../../lib/notify';
 import { appUrl, authEnabled, safeEqual, screenshotKey } from '../../../lib/auth';
-import { answerCallbackQuery, editMessageText, escapeHtml, isAllowedChat, progressBar, sendMessage, sendPhoto, statusEmoji } from '../../../lib/telegram';
+import { answerCallbackQuery, deleteMessage, downloadFile, editMessageText, escapeHtml, isAllowedChat, progressBar, sendMessage, sendPhoto, statusEmoji } from '../../../lib/telegram';
+import { attachInvoice, findRecentCardTransaction } from '../../../lib/invoiceImport';
+import { InvoiceError } from '../../../lib/invoice';
+
+// Ler PDFs grandes pode passar do tempo padrão da função.
+export const maxDuration = 60;
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +30,12 @@ O bot aprende: se você corrigir a categoria, da próxima vez ele acerta.
 
 <b>Custo fixo x gasto variável</b>
 Custo fixo é o que se repete todo mês (financiamento, internet, luz, fatura). Gasto variável é o do dia a dia. O bot identifica sozinho, e um botão permite trocar.
+
+<b>Fatura do cartão detalhada</b>
+• Envie o arquivo da fatura (PDF, OFX ou CSV) com a legenda <code>Cartão inter 500</code>
+• Ou responda à mensagem do lançamento do cartão com o arquivo
+• PDF com senha: legenda <code>senha 12345</code> (o bot apaga a mensagem depois de ler)
+Cada compra da fatura fica guardada dentro do lançamento, já com a categoria.
 
 <b>Metas</b>
 • <code>gerar metas</code> — cria as metas do mês pelo histórico de 3 meses
@@ -235,6 +246,79 @@ async function handleTransactions(chatId, senderName, lines) {
   }
 }
 
+const INVOICE_EXTENSIONS = /\.(pdf|ofx|csv|txt)$/i;
+
+// Qual lançamento recebe a fatura: legenda > mensagem respondida > cartão recente sem itens > novo.
+async function invoiceTarget(message, caption, senderName) {
+  if (caption) {
+    const entry = parseEntry(caption);
+    if (entry && entry.type === EXPENSE) {
+      const result = await classify(entry.description, EXPENSE);
+      const tx = await prisma.transaction.create({
+        data: { description: entry.description, amount: entry.amount, type: EXPENSE, category: entry.forcedCategory || result.category, kind: result.kind, senderName },
+      });
+      return { ...tx, fresh: true };
+    }
+  }
+  const buttons = message.reply_to_message?.reply_markup?.inline_keyboard?.flat() || [];
+  const repliedId = buttons.map(b => b.callback_data?.match(/^(?:d|c|k):(\d+)/)?.[1]).find(Boolean);
+  if (repliedId) {
+    const tx = await prisma.transaction.findUnique({ where: { id: parseInt(repliedId, 10) } });
+    if (tx) return tx;
+  }
+  return findRecentCardTransaction(senderName);
+}
+
+async function handleDocument(message, senderName) {
+  const chatId = message.chat.id.toString();
+  const doc = message.document;
+  if (!INVOICE_EXTENSIONS.test(doc.file_name || '') && doc.mime_type !== 'application/pdf') {
+    await sendMessage(chatId, '📎 Para detalhar a fatura, envie o arquivo em <b>PDF</b>, <b>OFX</b> ou <b>CSV</b>.');
+    return;
+  }
+
+  // A senha do PDF vem na legenda e não é guardada; a mensagem é apagada depois de lida.
+  const rawCaption = (message.caption || '').trim();
+  const password = rawCaption.match(/senha[:\s]+(\S+)/i)?.[1];
+  const caption = rawCaption.replace(/senha[:\s]+\S+/i, '').trim();
+  if (password) await deleteMessage(chatId, message.message_id);
+
+  await sendMessage(chatId, '📎 Lendo a fatura…');
+  try {
+    const buffer = await downloadFile(doc.file_id);
+    const target = await invoiceTarget(message, caption, senderName);
+    const result = await attachInvoice({ transactionId: target?.id, buffer, filename: doc.file_name, password, senderName });
+    const tx = result.transaction;
+
+    const diff = Math.round((result.total - tx.amount) * 100) / 100;
+    const lines = [
+      `📎 <b>Fatura ${result.created ? 'lançada' : 'anexada'}</b> em <b>${escapeHtml(tx.description)}</b> (${formatBRL(tx.amount)})`,
+      `${result.items.length} compras · total da fatura ${formatBRL(result.total)}${Math.abs(diff) >= 0.01 ? ` · diferença ${formatBRL(diff)}` : ' ✓'}`,
+      '',
+      '<b>Por categoria</b>',
+      ...result.breakdown.map(b => `${categoryInfo(b.category).emoji} ${escapeHtml(b.category)}: ${formatBRL(b.total)}`),
+      '',
+      '<b>Maiores compras</b>',
+      ...[...result.items].sort((a, b) => b.amount - a.amount).slice(0, 8).map(i => `• ${escapeHtml(i.description)} ${formatBRL(i.amount)}`),
+    ];
+    if (result.items.length > 8) lines.push(`… e mais ${result.items.length - 8}. Veja tudo no app, tocando no lançamento.`);
+
+    const keyboard = [[{ text: '📱 Ver no app', url: `${appUrl()}/?tab=lancamentos&tipo=despesa&category=${encodeURIComponent(tx.category)}` }]];
+    if (Math.abs(diff) >= 0.01) keyboard.unshift([{ text: `✏️ Usar o total da fatura (${formatBRL(result.total)})`, callback_data: `u:${tx.id}` }]);
+    await sendMessage(chatId, lines.join('\n'), { inline_keyboard: keyboard });
+    if (result.created || target?.fresh) after(() => notifyTransaction(tx, { fromChatId: chatId }));
+  } catch (error) {
+    if (error instanceof InvoiceError && error.code === 'password') {
+      await sendMessage(chatId, `🔒 ${escapeHtml(error.message)} Reenvie o PDF com a legenda <code>senha 12345</code> (costuma ser parte do CPF).\n\nAlternativa sem senha: no app do banco, exporte a fatura em <b>OFX</b> ou <b>CSV</b>.`);
+    } else if (error instanceof InvoiceError) {
+      await sendMessage(chatId, `⚠️ ${escapeHtml(error.message)}\n\nSe o PDF não funcionar, tente exportar a fatura em <b>OFX</b> ou <b>CSV</b> pelo app do banco.`);
+    } else {
+      console.error('Invoice import error:', error);
+      await sendMessage(chatId, '⚠️ Não consegui ler a fatura. Tente de novo ou envie em OFX/CSV.');
+    }
+  }
+}
+
 async function handleMessage(message) {
   const chatId = message.chat.id.toString();
   const senderName = message.from?.first_name || 'Usuário';
@@ -249,6 +333,11 @@ async function handleMessage(message) {
     update: { name: senderName },
     create: { chatId, name: senderName },
   });
+
+  if (message.document) {
+    await handleDocument(message, senderName);
+    return;
+  }
 
   const lines = message.text.split('\n').map(l => l.trim()).filter(Boolean);
   const [firstLine, ...otherLines] = lines;
@@ -322,11 +411,21 @@ async function handleCallback(query) {
   const deleteMatch = data.match(/^(?:d:|delete_)(\d+)$/);
   const categoryMatch = data.match(/^c:(\d+):(\d+)$/);
   const kindMatch = data.match(/^k:(\d+)$/);
-  const id = parseInt((deleteMatch || categoryMatch || kindMatch)?.[1], 10);
+  const totalMatch = data.match(/^u:(\d+)$/);
+  const id = parseInt((deleteMatch || categoryMatch || kindMatch || totalMatch)?.[1], 10);
   const tx = Number.isFinite(id) ? await prisma.transaction.findUnique({ where: { id } }) : null;
 
-  if ((deleteMatch || categoryMatch || kindMatch) && !tx) {
+  if ((deleteMatch || categoryMatch || kindMatch || totalMatch) && !tx) {
     await answerCallbackQuery(query.id, 'Esse lançamento já foi excluído.');
+    return;
+  }
+
+  if (totalMatch) {
+    const agg = await prisma.transactionItem.aggregate({ _sum: { amount: true }, where: { transactionId: id } });
+    const total = Math.round((agg._sum.amount || 0) * 100) / 100;
+    if (total > 0) await prisma.transaction.update({ where: { id }, data: { amount: total } });
+    await answerCallbackQuery(query.id, `Valor atualizado para ${formatBRL(total)}`);
+    await editMessageText(chatId, messageId, `✅ <b>${escapeHtml(tx.description)}</b> agora vale ${formatBRL(total)}, o total da fatura.`);
     return;
   }
 
@@ -372,7 +471,7 @@ export async function POST(req) {
   try {
     const update = await req.json();
     if (update.callback_query) await handleCallback(update.callback_query);
-    else if (update.message?.text) await handleMessage(update.message);
+    else if (update.message?.text || update.message?.document) await handleMessage(update.message);
   } catch (error) {
     console.error('Webhook error:', error);
   }

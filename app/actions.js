@@ -11,6 +11,8 @@ import { classify } from '../lib/classifier';
 import { dateFromISO, formatBRL, parseAmount } from '../lib/format';
 import { copyBudgetsFromPreviousMonth, upsertBudget } from '../lib/finance';
 import { notifyTransaction } from '../lib/notify';
+import { attachInvoice } from '../lib/invoiceImport';
+import { InvoiceError } from '../lib/invoice';
 
 // O proxy já barra quem não está logado; aqui é a segunda trava (as actions são endpoints públicos).
 async function requireAuth() {
@@ -129,6 +131,51 @@ export async function copyPreviousBudgets(formData) {
   revalidatePath('/');
   if (!sourceCount) return { ok: false, message: 'O mês anterior não tem metas.' };
   return { ok: true, message: copied ? `${copied} meta(s) copiada(s).` : 'As metas já estavam copiadas.' };
+}
+
+// Anexa a fatura (PDF/OFX/CSV) ao lançamento: cada compra vira um item com categoria.
+export async function importInvoice(transactionId, formData) {
+  await requireAuth();
+  const file = formData.get('file');
+  if (!file || typeof file === 'string' || !file.size) return { ok: false, message: 'Escolha o arquivo da fatura.' };
+  if (file.size > 4 * 1024 * 1024) return { ok: false, message: 'Arquivo maior que 4 MB. Tente o OFX ou CSV.' };
+
+  try {
+    const result = await attachInvoice({
+      transactionId,
+      buffer: Buffer.from(await file.arrayBuffer()),
+      filename: file.name,
+      password: formData.get('password')?.toString() || undefined,
+    });
+    revalidatePath('/');
+    const diff = Math.round((result.total - result.transaction.amount) * 100) / 100;
+    return {
+      ok: true,
+      message: `${result.items.length} compras importadas (${formatBRL(result.total)})${Math.abs(diff) >= 0.01 ? ` · diferença de ${formatBRL(diff)}` : ''}`,
+      diff,
+      total: result.total,
+    };
+  } catch (error) {
+    if (error instanceof InvoiceError) return { ok: false, code: error.code, message: error.message };
+    console.error('Erro ao importar fatura:', error);
+    return { ok: false, message: 'Não consegui ler a fatura. Tente o OFX ou CSV.' };
+  }
+}
+
+export async function applyInvoiceTotal(transactionId) {
+  await requireAuth();
+  const agg = await prisma.transactionItem.aggregate({ _sum: { amount: true }, where: { transactionId } });
+  const total = Math.round((agg._sum.amount || 0) * 100) / 100;
+  if (total > 0) await prisma.transaction.update({ where: { id: transactionId }, data: { amount: total } });
+  revalidatePath('/');
+  return { ok: true, message: `Valor atualizado para ${formatBRL(total)}` };
+}
+
+export async function clearInvoice(transactionId) {
+  await requireAuth();
+  await prisma.transactionItem.deleteMany({ where: { transactionId } });
+  revalidatePath('/');
+  return { ok: true, message: 'Detalhamento removido.' };
 }
 
 export async function subscribePush(subscription, userName) {

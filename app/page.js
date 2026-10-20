@@ -9,6 +9,7 @@ import { InstallHint } from './components/InstallHint';
 import { NotificationSettings } from './components/NotificationSettings';
 import { QuickAdd } from './components/QuickAdd';
 import { TransactionsList } from './components/TransactionsList';
+import { ThemeToggle } from './components/ThemeToggle';
 import { logout } from './actions';
 import { authEnabled } from '../lib/auth';
 import { EXPENSE, FIXED, INCOME, categoriesFor, categoryNamesFor } from '../lib/categories';
@@ -85,6 +86,7 @@ export default async function Home({ searchParams }) {
           prev: hrefFor({ ...prev, ...keep }),
           next: hrefFor({ ...nextMonth, ...keep }),
           today: isToday ? null : hrefFor({ month: today.month, year: today.year, ...keep }),
+          add: tab === 'lancar' ? null : hrefFor({ tab: 'lancar', tipo: tipo === INCOME ? INCOME : null }),
         }}
         summary={summary}
         segment={readOnly ? null : segment}
@@ -92,7 +94,7 @@ export default async function Home({ searchParams }) {
 
       <main className="content">{content}</main>
 
-      {!readOnly && <BottomNav active={tab} hrefFor={hrefFor} addHref={hrefFor({ tab: 'lancar', tipo: tipo === INCOME ? INCOME : null })} />}
+      {!readOnly && <BottomNav active={tab} hrefFor={hrefFor} />}
     </div>
   );
 }
@@ -369,6 +371,11 @@ async function AjustesTab() {
       <section className="card">
         <h2 className="section-title">🔔 Notificações no celular</h2>
         <NotificationSettings people={people} publicKey={process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || ''} />
+      </section>
+
+      <section className="card">
+        <h2 className="section-title">🎨 Tema</h2>
+        <ThemeToggle />
       </section>
 
       <InstallHint always />

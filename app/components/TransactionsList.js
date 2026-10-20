@@ -3,7 +3,8 @@
 import { useState, useTransition } from 'react';
 import { EXPENSE, FIXED, INCOME, VARIABLE, categoriesFor, categoryInfo } from '../../lib/categories';
 import { formatBRL, formatDate, toISODate } from '../../lib/format';
-import { deleteTransaction, updateTransaction } from '../actions';
+import { applyInvoiceTotal, clearInvoice, deleteTransaction, importInvoice, updateTransaction } from '../actions';
+import { Toast } from './Toast';
 
 function groupByDay(transactions) {
   const groups = [];
@@ -19,9 +20,11 @@ function groupByDay(transactions) {
 const signed = (t) => (t.type === INCOME ? t.amount : -t.amount);
 
 export function TransactionsList({ transactions, readOnly = false }) {
-  const [editingId, setEditingId] = useState(null);
+  const [open, setOpen] = useState({ id: null, mode: null });
+  const [toast, setToast] = useState(null);
 
   if (!transactions.length) return <p className="muted empty">Nenhum lançamento encontrado.</p>;
+  const close = () => setOpen({ id: null, mode: null });
 
   return (
     <div className="tx-groups">
@@ -35,11 +38,20 @@ export function TransactionsList({ transactions, readOnly = false }) {
             </header>
             <ul className="tx-list">
               {group.items.map(t => (
-                <li key={t.id}>
-                  {editingId === t.id ? (
-                    <EditForm transaction={t} onClose={() => setEditingId(null)} />
+                <li key={t.id} className={open.id === t.id ? 'is-open' : ''}>
+                  {open.id === t.id && open.mode === 'edit' ? (
+                    <EditForm transaction={t} onClose={close} />
                   ) : (
-                    <TransactionRow transaction={t} onClick={readOnly ? undefined : () => setEditingId(t.id)} />
+                    <>
+                      <TransactionRow
+                        transaction={t}
+                        onClick={readOnly ? undefined : () => setOpen(open.id === t.id ? { id: null, mode: null } : { id: t.id, mode: 'details' })}
+                      />
+                      {open.id === t.id && (
+                        <Details transaction={t} onEdit={() => setOpen({ id: t.id, mode: 'edit' })} onToast={setToast} />
+                      )}
+                      {readOnly && t.items?.length > 0 && <ItemsList items={t.items} compact />}
+                    </>
                   )}
                 </li>
               ))}
@@ -47,6 +59,7 @@ export function TransactionsList({ transactions, readOnly = false }) {
           </section>
         );
       })}
+      <Toast toast={toast} onDone={() => setToast(null)} />
     </div>
   );
 }
@@ -63,10 +76,100 @@ function TransactionRow({ transaction: t, onClick }) {
         <span className="tx-meta">
           {t.category} · {t.senderName}
           {!income && t.kind === FIXED && <span className="badge">fixo</span>}
+          {t.items?.length > 0 && <span className="badge badge-items">📎 {t.items.length}</span>}
         </span>
       </span>
       <span className={`tx-amount ${income ? 'text-success' : ''}`}>{income ? '+' : '−'} {formatBRL(t.amount)}</span>
     </Tag>
+  );
+}
+
+function ItemsList({ items, compact = false }) {
+  return (
+    <ul className={`items-list ${compact ? 'items-compact' : ''}`}>
+      {items.map(item => (
+        <li key={item.id}>
+          <span className="items-date muted">{item.date ? formatDate(item.date) : ''}</span>
+          <span className="items-desc">
+            <span aria-hidden>{categoryInfo(item.category).emoji}</span> {item.description}
+          </span>
+          <span className={`items-amount ${item.amount < 0 ? 'text-success' : ''}`}>{formatBRL(item.amount)}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function Details({ transaction: t, onEdit, onToast }) {
+  const [pending, startTransition] = useTransition();
+  const [needsPassword, setNeedsPassword] = useState(false);
+  const items = t.items || [];
+  const itemsTotal = Math.round(items.reduce((a, i) => a + i.amount, 0) * 100) / 100;
+  const diff = Math.round((itemsTotal - t.amount) * 100) / 100;
+
+  const breakdown = Object.entries(items.reduce((acc, i) => ({ ...acc, [i.category]: (acc[i.category] || 0) + i.amount }), {}))
+    .sort((a, b) => b[1] - a[1]);
+
+  function upload(formData) {
+    startTransition(async () => {
+      const result = await importInvoice(t.id, formData);
+      if (result.code === 'password') setNeedsPassword(true);
+      onToast(result);
+    });
+  }
+
+  function remove() {
+    if (!confirm(`Excluir "${t.description}"?`)) return;
+    startTransition(async () => { await deleteTransaction(t.id); });
+  }
+
+  return (
+    <div className="tx-details">
+      {items.length > 0 ? (
+        <>
+          <div className="details-head">
+            <strong>Detalhamento · {items.length} compras</strong>
+            <span>{formatBRL(itemsTotal)}</span>
+          </div>
+          <div className="chips">
+            {breakdown.map(([category, total]) => (
+              <span key={category} className="chip chip-static">{categoryInfo(category).emoji} {category} <b>{formatBRL(total)}</b></span>
+            ))}
+          </div>
+          {Math.abs(diff) >= 0.01 && (
+            <div className="details-diff">
+              <span className="small">A fatura soma {formatBRL(itemsTotal)}, {diff > 0 ? 'acima' : 'abaixo'} do lançado em {formatBRL(Math.abs(diff))}.</span>
+              <button type="button" className="btn btn-ghost btn-sm" disabled={pending} onClick={() => startTransition(async () => onToast(await applyInvoiceTotal(t.id)))}>
+                Usar {formatBRL(itemsTotal)}
+              </button>
+            </div>
+          )}
+          <ItemsList items={items} />
+        </>
+      ) : t.type !== INCOME && (
+        <p className="muted small">É a fatura do cartão? Anexe o arquivo e cada compra aparece aqui, já com categoria.</p>
+      )}
+
+      {t.type !== INCOME && (
+        <form action={upload} className="attach-form">
+          <label className="file-input">
+            <span>📎 {items.length ? 'Substituir fatura' : 'Anexar fatura'} <span className="muted small">(PDF, OFX ou CSV)</span></span>
+            <input type="file" name="file" accept=".pdf,.ofx,.csv,.txt,application/pdf,text/csv" required />
+          </label>
+          {needsPassword && <input name="password" type="password" className="input" placeholder="Senha do PDF (geralmente parte do CPF)" autoComplete="off" />}
+          <button type="submit" className="btn btn-primary btn-sm" disabled={pending}>{pending ? 'Lendo…' : 'Importar'}</button>
+        </form>
+      )}
+
+      <div className="tx-edit-actions">
+        <button type="button" className="btn btn-danger btn-sm" onClick={remove} disabled={pending}>Excluir</button>
+        {items.length > 0 && (
+          <button type="button" className="btn btn-ghost btn-sm" disabled={pending} onClick={() => startTransition(async () => onToast(await clearInvoice(t.id)))}>Remover itens</button>
+        )}
+        <span className="spacer" />
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onEdit}>✏️ Editar</button>
+      </div>
+    </div>
   );
 }
 
@@ -82,14 +185,6 @@ function EditForm({ transaction: t, onClose }) {
       const result = await updateTransaction(t.id, formData);
       if (result.ok) onClose();
       else setError(result.message);
-    });
-  }
-
-  function remove() {
-    if (!confirm(`Excluir "${t.description}"?`)) return;
-    startTransition(async () => {
-      await deleteTransaction(t.id);
-      onClose();
     });
   }
 
@@ -115,7 +210,6 @@ function EditForm({ transaction: t, onClose }) {
       )}
       {error && <p className="error-text">{error}</p>}
       <div className="tx-edit-actions">
-        <button type="button" className="btn btn-danger" onClick={remove} disabled={pending}>Excluir</button>
         <span className="spacer" />
         <button type="button" className="btn btn-ghost" onClick={onClose} disabled={pending}>Cancelar</button>
         <button type="submit" className="btn btn-primary" disabled={pending}>{pending ? '…' : 'Salvar'}</button>
