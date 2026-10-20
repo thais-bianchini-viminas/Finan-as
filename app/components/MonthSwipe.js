@@ -8,7 +8,7 @@ const LEAVE_MS = 170;         // duração da saída antes de navegar
 // Gestos que começam aqui pertencem ao componente (rolagem de chips, gráficos, campos).
 const IGNORE = '.chips-scroll, .chart, .donut-chart, input, textarea, select, [data-no-swipe]';
 
-// Deslizar para a esquerda → mês anterior; para a direita → mês seguinte (como pedido).
+// Deslizar para a esquerda → mês seguinte; para a direita → mês anterior (padrão de carrossel).
 // As setas do cabeçalho (data-month-nav) usam a mesma animação.
 export function MonthSwipe({ monthKey, prevHref, nextHref, children }) {
   const router = useRouter();
@@ -53,7 +53,7 @@ export function MonthSwipe({ monthKey, prevHref, nextHref, children }) {
     const dy = t.clientY - s.y;
     // Precisa ser claramente horizontal e rápido o bastante (não confundir com rolagem).
     if (Math.abs(dx) < MIN_DISTANCE || Math.abs(dx) < Math.abs(dy) * 1.5 || Date.now() - s.time > 800) return;
-    go(dx < 0 ? 'prev' : 'next');
+    go(dx < 0 ? 'next' : 'prev');
   }
 
   const className = phase.state === 'idle' ? '' : `swipe-${phase.state}-${phase.dir}`;
